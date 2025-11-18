@@ -4,7 +4,7 @@ import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { factorial } from 'mathjs';
 import './App.css';
 
-// --- Lógica Matemática (Mantida) ---
+// --- Lógica Matemática ---
 function poissonPmf(k, lambda) {
   if (isNaN(lambda) || lambda === undefined || lambda === null) return 0;
   return (Math.pow(lambda, k) * Math.exp(-lambda)) / factorial(k);
@@ -52,12 +52,11 @@ function calculateProbabilities(lambdaHome, lambdaAway) {
   };
 }
 
-// --- Componentes de UI ---
+// --- Componentes UI ---
 const SliderInput = ({ label, value, setValue, min, max }) => (
   <div className="flex flex-col mb-2">
     <div className="flex justify-between items-center mb-1">
       <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">{label}</span>
-      {/* COR ALTERADA: indigo-600 -> site-primary-600 */}
       <span className="text-[10px] font-bold text-site-primary-600 bg-site-primary-50 px-2 py-0.5 rounded-full">{value}</span>
     </div>
     <input 
@@ -67,7 +66,6 @@ const SliderInput = ({ label, value, setValue, min, max }) => (
       step="0.1" 
       value={value} 
       onChange={e => setValue(parseFloat(e.target.value))}
-      // COR ALTERADA: accent-indigo-600 -> accent-site-primary-900
       className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-site-primary-900"
     />
   </div>
@@ -86,66 +84,77 @@ const ProbBox = ({ label, value }) => {
   );
 };
 
+// --- Componente Tabela de Placar (Heatmap - 2 Casas Decimais) ---
 const ScoreTable = ({ matrix, homeTeam, awayTeam }) => {
   const flatValues = matrix.flat();
   const maxVal = Math.max(...flatValues) || 1;
 
   return (
-    <div className="mt-2 w-full">
-      <h4 className="text-xs font-bold text-gray-400 uppercase mb-4 text-center border-b pb-2 tracking-widest">
+    <div className="mt-2 w-full flex flex-col items-center">
+      <h4 className="text-xs font-bold text-gray-400 uppercase mb-6 text-center border-b pb-2 tracking-widest w-full">
         Probabilidade do Placar Exato
       </h4>
       
-      <div className="overflow-x-auto flex justify-center">
-        <table className="border-collapse text-sm w-full">
-          <thead>
-            <tr>
-              <th className="p-2"></th>
-              {matrix[0].map((_, j) => (
-                <th key={j} className="p-2 text-gray-500 font-bold border-b-2 border-gray-100">
-                  {j}
-                </th>
-              ))}
-              <th className="p-2 pl-4 text-gray-400 text-xs font-normal italic text-left w-32 leading-tight">
-                Gols Visitante<br/>
-                <span className="font-bold text-gray-600 not-italic">({awayTeam})</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {matrix.map((row, i) => (
-              <tr key={i}>
-                <th className="p-2 text-gray-500 font-bold border-r-2 border-gray-100 text-right pr-3">
-                  {i}
-                </th>
-                
-                {row.map((prob, j) => {
-                  const opacity = prob / maxVal;
-                  const textColor = opacity > 0.6 ? 'text-white' : 'text-gray-700';
-                  
-                  // COR ALTERADA: Base vermelha (hot) mantida
-                  const cellStyle = {
-                    backgroundColor: `rgba(185, 28, 28, ${opacity})`, 
-                  };
+      <div className="flex items-center">
+        
+        {/* Eixo Y (Vertical) - Mandante */}
+        <div className="flex flex-col justify-center items-center mr-3">
+           <div className="w-8 flex items-center justify-center">
+              <span className="transform -rotate-90 whitespace-nowrap text-xs font-bold text-gray-500 uppercase tracking-wide">
+                Gols {homeTeam}
+              </span>
+           </div>
+        </div>
 
-                  return (
-                    <td key={j} className="border border-gray-100 p-3 text-center transition-all hover:scale-105 cursor-default" style={cellStyle}>
-                      <div className={`flex items-center justify-center h-full w-full ${textColor} font-bold`}>
-                        {prob > 0.1 ? prob.toFixed(1) + '%' : ''}
-                      </div>
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-             <tr>
-              <th className="p-2 text-right"></th>
-              <td colSpan="7" className="text-xs text-gray-500 italic text-center pt-3">
-                <span className="mr-2">↑</span> Gols Mandante <span className="font-bold text-gray-600 not-italic">({homeTeam})</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        {/* Tabela e Eixo X */}
+        <div>
+            {/* Eixo X (Horizontal) - Visitante */}
+            <div className="text-center mb-2 text-xs font-bold text-gray-500 uppercase tracking-wide pl-10">
+               Gols {awayTeam}
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="border-collapse text-sm">
+                <thead>
+                  <tr>
+                    <th className="p-2"></th>
+                    {matrix[0].map((_, j) => (
+                      <th key={j} className="p-2 text-gray-500 font-bold border-b-2 border-gray-100 w-[72px] text-center">
+                        {j}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {matrix.map((row, i) => (
+                    <tr key={i}>
+                      {/* Cabeçalho Lateral (Números) */}
+                      <th className="p-2 text-gray-500 font-bold border-r-2 border-gray-100 text-right h-10 pr-3">
+                        {i}
+                      </th>
+                      
+                      {/* Células */}
+                      {row.map((prob, j) => {
+                        const opacity = prob / maxVal;
+                        const textColor = opacity > 0.6 ? 'text-white' : 'text-gray-700';
+                        const cellStyle = {
+                          backgroundColor: `rgba(185, 28, 28, ${opacity})`, 
+                        };
+
+                        return (
+                          <td key={j} className="border border-gray-100 p-1 text-center transition-all hover:scale-110 cursor-default w-[72px] h-10" style={cellStyle}>
+                            <div className={`flex items-center justify-center h-full w-full ${textColor} font-bold text-xs`}>
+                              {prob > 0.01 ? prob.toFixed(2) + '%' : ''}
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+        </div>
       </div>
     </div>
   );
@@ -171,9 +180,8 @@ function MatchAnalysis({ match }) {
   const probs = calculateProbabilities(adjustedLambdaHome, adjustedLambdaAway);
 
   return (
-    <div className="bg-white shadow-lg rounded-2xl overflow-hidden border border-gray-200 mt-6 transition-all duration-300">
+    <div className="bg-white shadow-lg rounded-2xl overflow-hidden border border-gray-200 mt-6 transition-all duration-300 animate-fade-in-up">
       {/* Cabeçalho */}
-      {/* COR ALTERADA: bg-gradient-to-r from-site-primary-900 to-site-primary-700 */}
       <div className="bg-gradient-to-r from-site-primary-900 to-site-primary-700 px-6 py-5 text-white text-center relative overflow-hidden">
          <div className="absolute top-0 left-0 w-full h-full bg-white opacity-5 transform -skew-x-12"></div>
          
@@ -181,7 +189,7 @@ function MatchAnalysis({ match }) {
           {match.competition}
         </span>
         <h2 className="relative z-10 text-3xl font-black mt-3 tracking-tight">
-          {match.homeTeam} <span className="text-site-primary-500 text-xl font-light mx-2">vs</span> {match.awayTeam}
+          {match.homeTeam} <span className="text-white/80 text-xl font-light mx-2">vs</span> {match.awayTeam}
         </h2>
         <p className="relative z-10 text-xs font-medium text-site-primary-200 mt-2 uppercase tracking-wide">
           {new Date(match.utcDate).toLocaleDateString('pt-BR')} • {new Date(match.utcDate).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}
@@ -217,7 +225,7 @@ function MatchAnalysis({ match }) {
           </div>
 
           {/* Tabela de Placar (Heatmap) */}
-          <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-inner flex-grow flex flex-col justify-center">
+          <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-inner flex-grow flex flex-col justify-center items-center">
              <ScoreTable matrix={probs.matrix} homeTeam={match.homeTeam} awayTeam={match.awayTeam} />
           </div>
 
@@ -228,7 +236,7 @@ function MatchAnalysis({ match }) {
 }
 
 
-// --- Componente Principal (App) ---
+// --- Componente Principal ---
 function App() {
   const [allMatches, setAllMatches] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -237,7 +245,6 @@ function App() {
   const [selectedMatchId, setSelectedMatchId] = useState("");
 
   useEffect(() => {
-    // ... (Mantido)
     const fetchMatches = async () => {
       try {
         const q = query(collection(db, "jogos_analise"), orderBy("utcDate", "asc"));
@@ -269,9 +276,8 @@ function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-site-primary-50">
         <div className="flex flex-col items-center">
-           {/* COR ALTERADA: border-indigo-600 -> border-site-primary-900 */}
            <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-site-primary-900 mb-4"></div>
            <p className="text-gray-400 text-sm font-medium animate-pulse">Carregando dados...</p>
         </div>
@@ -280,69 +286,72 @@ function App() {
   }
 
   return (
-    // COR ALTERADA: bg-gray-100 -> bg-site-primary-50 (suave)
     <div className="min-h-screen bg-site-primary-50 py-8 px-4 sm:px-6 lg:px-8 font-sans text-gray-800">
       <div className="max-w-6xl mx-auto">
         
-        {/* Header */}
+        {/* Header com a Logo */}
         <div className="flex flex-col items-center mb-10">
-           {/* COR ALTERADA: bg-white -> bg-site-primary-900/5 */}
-           <div className="bg-site-primary-900/5 p-3 rounded-2xl shadow-sm mb-4">
-              <span className="text-2xl">⚽</span>
-           </div>
-          <h1 className="text-4xl font-black text-gray-900 tracking-tight">
-            ROI<span className="text-site-primary-600">+</span>
-          </h1>
-          <p className="text-gray-500 text-sm mt-1 font-medium">Ferramenta de Análise Preditiva</p>
+           {/* NOVA IMAGEM DA LOGO */}
+           <img 
+              src="/logo-roi-plus.png" 
+              alt="Logo ROI+" 
+              className="w-48 mb-6" // Ajuste a largura conforme necessário
+           />
         </div>
 
         {/* Filtros */}
-        <div className="bg-white p-1 rounded-2xl shadow-sm border border-gray-200 mb-8 max-w-3xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-1">
-            <select 
-              value={selectedLeague}
-              onChange={(e) => {
-                setSelectedLeague(e.target.value);
-                setSelectedMatchId("");
-              }}
-              // COR ALTERADA: focus:ring-indigo-500 -> focus:ring-site-primary-500
-              className="block w-full pl-4 pr-10 py-3 text-base border-transparent focus:outline-none focus:ring-2 focus:ring-site-primary-500 focus:border-transparent sm:text-sm rounded-xl hover:bg-gray-50 transition-colors cursor-pointer text-gray-700 font-medium bg-white"
-            >
-              <option value="">📂 Selecione o Campeonato</option>
-              {uniqueLeagues.map(league => (
-                <option key={league} value={league}>{league}</option>
-              ))}
-            </select>
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 mb-8 max-w-4xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            {/* Seletor de Liga */}
+            <div>
+              <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-wider">1. Campeonato</label>
+              <select 
+                value={selectedLeague}
+                onChange={(e) => {
+                  setSelectedLeague(e.target.value);
+                  setSelectedMatchId("");
+                }}
+                className="block w-full pl-4 pr-10 py-3 text-base border-gray-200 focus:outline-none focus:ring-2 focus:ring-site-primary-500 focus:border-transparent sm:text-sm rounded-xl bg-gray-50 hover:bg-white transition-all cursor-pointer text-gray-700 font-medium border"
+              >
+                <option value="">Selecione uma Liga...</option>
+                {uniqueLeagues.map(league => (
+                  <option key={league} value={league}>{league}</option>
+                ))}
+              </select>
+            </div>
 
-            <select 
-              value={selectedMatchId}
-              onChange={(e) => setSelectedMatchId(e.target.value)}
-              disabled={!selectedLeague}
-              // COR ALTERADA: focus:ring-indigo-500 -> focus:ring-site-primary-500
-              className="block w-full pl-4 pr-10 py-3 text-base border-transparent focus:outline-none focus:ring-2 focus:ring-site-primary-500 focus:border-transparent sm:text-sm rounded-xl hover:bg-gray-50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 font-medium bg-white"
-            >
-              <option value="">
-                {selectedLeague ? "👉 Selecione a Partida" : "Aguardando..."}
-              </option>
-              {filteredMatches.map(match => (
-                <option key={match.id} value={match.id}>
-                  {match.homeTeam} vs {match.awayTeam}
+            {/* Seletor de Jogo */}
+            <div>
+              <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-wider">2. Partida</label>
+              <select 
+                value={selectedMatchId}
+                onChange={(e) => setSelectedMatchId(e.target.value)}
+                disabled={!selectedLeague}
+                className="block w-full pl-4 pr-10 py-3 text-base border-gray-200 focus:outline-none focus:ring-2 focus:ring-site-primary-500 focus:border-transparent sm:text-sm rounded-xl bg-gray-50 hover:bg-white transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 font-medium border"
+              >
+                <option value="">
+                  {selectedLeague 
+                    ? (filteredMatches.length > 0 ? "Selecione o Jogo..." : "Nenhum jogo encontrado") 
+                    : "Aguardando Liga..."}
                 </option>
-              ))}
-            </select>
+                {filteredMatches.map(match => (
+                  <option key={match.id} value={match.id}>
+                    {match.homeTeam} vs {match.awayTeam}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 
         {/* Exibição */}
         {currentMatch ? (
-          <div className="animate-fade-in-up">
              <MatchAnalysis match={currentMatch} />
-          </div>
         ) : (
-          <div className="flex flex-col items-center justify-center py-20 text-gray-300 border-2 border-dashed border-gray-200 rounded-3xl bg-gray-50/50">
-            <svg className="w-16 h-16 mb-4 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
-            <p className="font-medium">Nenhuma partida selecionada</p>
-            <p className="text-xs mt-1">Utilize os filtros acima para começar</p>
+          <div className="flex flex-col items-center justify-center py-20 text-gray-300 border-2 border-dashed border-gray-200 rounded-3xl bg-site-primary-900/5">
+            <svg className="w-16 h-16 mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+            <p className="font-medium text-gray-400">Nenhuma partida selecionada</p>
           </div>
         )}
 
