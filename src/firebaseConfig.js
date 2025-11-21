@@ -1,21 +1,15 @@
-// src/firebaseConfig.js
-
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 
-// TODO: Cole a sua configuração do Firebase aqui
+// Agora lemos as variáveis de ambiente
 const firebaseConfig = {
-  apiKey: "AIzaSyAO8ShUKFrj9v1t4fVsWYiWez_bHLppy9I",
-  authDomain: "roiplus-becfc.firebaseapp.com",
-  projectId: "roiplus-becfc",
-  storageBucket: "roiplus-becfc.firebasestorage.app",
-  messagingSenderId: "817189558532",
-  appId: "1:817189558532:web:373906f1a74f7d1e509851",
-  measurementId: "G-F5S39QK6RX"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
-// Inicializa o Firebase
 const app = initializeApp(firebaseConfig);
-
-// Exporta o banco de dados (Firestore) para ser usado em outros arquivos
 export const db = getFirestore(app);
