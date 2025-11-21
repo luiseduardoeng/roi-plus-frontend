@@ -6,7 +6,7 @@ import { factorial } from 'mathjs';
 import './App.css';
 import logoImg from './assets/logo.png';
 
-// --- CONSTANTES ---
+// --- Dicionário de Ligas ---
 const LEAGUE_NAMES = {
   'WC': 'FIFA World Cup', 'CL': 'UEFA Champions League', 'BL1': 'Bundesliga (Alemanha)',
   'DED': 'Eredivisie (Holanda)', 'BSA': 'Brasileirão Série A', 'PD': 'La Liga (Espanha)',
@@ -14,7 +14,7 @@ const LEAGUE_NAMES = {
   'EC': 'European Championship', 'SA': 'Serie A (Itália)', 'PL': 'Premier League (Inglaterra)'
 };
 
-// --- MATEMÁTICA ---
+// --- Lógica Matemática ---
 function poissonPmf(k, lambda) {
   if (isNaN(lambda) || lambda === undefined || lambda === null) return 0;
   return (Math.pow(lambda, k) * Math.exp(-lambda)) / factorial(k);
@@ -44,7 +44,7 @@ function calculateProbabilities(lambdaHome, lambdaAway) {
   };
 }
 
-// --- COMPONENTES UI ---
+// --- Componentes UI ---
 const SliderInput = ({ label, value, setValue, min, max }) => (
   <div className="flex flex-col mb-2">
     <div className="flex justify-between items-center mb-1">
@@ -55,51 +55,14 @@ const SliderInput = ({ label, value, setValue, min, max }) => (
   </div>
 );
 
-// NOVO: Caixa de Odds Interativa
-const OddBox = ({ label, probability }) => {
-  const [userOdd, setUserOdd] = useState("");
-  
-  // Calcula Odd Justa (Fair Odd) = 100 / Probabilidade
-  const fairOdd = probability > 0 ? (100 / probability) : 0;
-  
-  // Calcula Valor Esperado (EV)
-  // EV% = ((Probabilidade_Real * Odd_Casa) - 1) * 100
-  // Simplificando: Se Odd_Casa > Fair_Odd, tem valor.
-  const hasValue = userOdd && parseFloat(userOdd) > fairOdd;
-  const evPercentage = userOdd ? ((parseFloat(userOdd) / fairOdd) - 1) * 100 : 0;
-
+const ProbBox = ({ label, value, highlight = false }) => {
+  const colorClass = highlight
+    ? "bg-purple-100 text-purple-800 border-purple-400 ring-2 ring-purple-400" 
+    : value > 50 ? "bg-purple-50 text-purple-800 border-purple-200" : "bg-white text-gray-600 border-gray-200";
   return (
-    <div className={`flex flex-col p-3 rounded-xl border flex-1 min-w-[90px] shadow-sm transition-all ${hasValue ? 'bg-green-50 border-green-300 ring-1 ring-green-400' : 'bg-white border-gray-200'}`}>
-      {/* Cabeçalho */}
-      <div className="flex justify-between items-center mb-2 border-b border-gray-100 pb-2">
-        <span className="text-[10px] font-bold uppercase text-gray-500">{label}</span>
-        <span className="text-xs font-bold text-site-primary-600">{probability.toFixed(1)}%</span>
-      </div>
-
-      {/* Odd Justa (Calculada) */}
-      <div className="flex justify-between items-center mb-2">
-        <span className="text-[9px] text-gray-400 uppercase">Justa:</span>
-        <span className="text-sm font-bold text-gray-700">@{fairOdd.toFixed(2)}</span>
-      </div>
-
-      {/* Input do Usuário */}
-      <div className="relative">
-        <input 
-          type="number" 
-          step="0.01" 
-          placeholder="Odd?"
-          value={userOdd}
-          onChange={(e) => setUserOdd(e.target.value)}
-          className={`w-full text-center text-sm font-bold p-1 rounded border focus:outline-none ${hasValue ? 'bg-green-100 text-green-800 border-green-300' : 'bg-gray-50 text-gray-600 border-gray-200'}`}
-        />
-      </div>
-
-      {/* Indicador de Valor */}
-      {userOdd && (
-        <div className={`text-[10px] font-bold text-center mt-1 ${hasValue ? 'text-green-600' : 'text-red-400'}`}>
-          {hasValue ? `+${evPercentage.toFixed(1)}% VALOR` : 'Sem Valor'}
-        </div>
-      )}
+    <div className={`flex flex-col items-center p-2 rounded-lg border ${colorClass} flex-1 min-w-[70px] shadow-sm transition-all`}>
+      <span className="text-[10px] font-bold mb-0.5 text-center uppercase tracking-wide">{label}</span>
+      <span className="text-xl font-extrabold">{value.toFixed(1)}%</span>
     </div>
   );
 };
@@ -138,7 +101,72 @@ const ScoreTable = ({ matrix, homeTeam, awayTeam }) => {
   );
 };
 
-// --- DISPLAY DE ANÁLISE (Com Calculadora de Odds) ---
+// NOVO COMPONENTE: Caixa de Odds Interativa
+const OddBox = ({ label, probability }) => {
+  const [userOdd, setUserOdd] = useState("");
+  const fairOdd = probability > 0 ? (100 / probability) : 0;
+  const hasValue = userOdd && parseFloat(userOdd) > fairOdd;
+  const evPercentage = userOdd ? ((parseFloat(userOdd) / fairOdd) - 1) * 100 : 0;
+
+  return (
+    <div className={`flex flex-col p-3 rounded-xl border flex-1 min-w-[90px] shadow-sm transition-all ${hasValue ? 'bg-green-50 border-green-300 ring-1 ring-green-400' : 'bg-white border-gray-200'}`}>
+      <div className="flex justify-between items-center mb-2 border-b border-gray-100 pb-2">
+        <span className="text-[10px] font-bold uppercase text-gray-500">{label}</span>
+        <span className="text-xs font-bold text-site-primary-600">{probability.toFixed(1)}%</span>
+      </div>
+      <div className="flex justify-between items-center mb-2">
+        <span className="text-[9px] text-gray-400 uppercase">Justa:</span>
+        <span className="text-sm font-bold text-gray-700">@{fairOdd.toFixed(2)}</span>
+      </div>
+      <div className="relative">
+        <input type="number" step="0.01" placeholder="Odd?" value={userOdd} onChange={(e) => setUserOdd(e.target.value)} className={`w-full text-center text-sm font-bold p-1 rounded border focus:outline-none ${hasValue ? 'bg-green-100 text-green-800 border-green-300' : 'bg-gray-50 text-gray-600 border-gray-200'}`} />
+      </div>
+      {userOdd && (
+        <div className={`text-[10px] font-bold text-center mt-1 ${hasValue ? 'text-green-600' : 'text-red-400'}`}>
+          {hasValue ? `+${evPercentage.toFixed(1)}% VALOR` : 'Sem Valor'}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// --- Componentes de Jogo ---
+function HistoryMatchDisplay({ match }) {
+  const probs = calculateProbabilities(match.lambda_home, match.lambda_away);
+  const result = match.scoreHome > match.scoreAway ? '1' : match.scoreAway > match.scoreHome ? '2' : 'X';
+  const totalGoals = match.scoreHome + match.scoreAway;
+  const isOver25 = totalGoals > 2.5;
+
+  return (
+    <div className="bg-white shadow rounded-2xl overflow-hidden border border-gray-200 mt-4 animate-fade-in-up">
+      <div className="bg-gray-800 px-6 py-4 text-white text-center relative overflow-hidden">
+        <span className="relative z-10 text-[10px] font-bold uppercase tracking-widest bg-black/30 px-2 py-1 rounded text-gray-200">
+          {LEAGUE_NAMES[match.competition_code] || match.competition} • Finalizado
+        </span>
+        <div className="relative z-10 mt-2 flex justify-center items-center space-x-4">
+           <span className="text-xl font-bold text-right w-1/3">{match.homeTeam}</span>
+           <div className="bg-white text-gray-900 px-4 py-1 rounded-lg font-black text-2xl shadow-lg">
+              {match.scoreHome} - {match.scoreAway}
+           </div>
+           <span className="text-xl font-bold text-left w-1/3">{match.awayTeam}</span>
+        </div>
+        <p className="relative z-10 text-xs font-medium text-gray-400 mt-2 uppercase tracking-wide">
+          {new Date(match.utcDate).toLocaleDateString('pt-BR')}
+        </p>
+      </div>
+      <div className="p-6">
+          <p className="text-xs text-center font-bold text-gray-400 uppercase mb-4">O que o modelo previu:</p>
+          <div className="grid grid-cols-4 gap-3">
+            <ProbBox label="CASA" value={probs.prob_1} highlight={result === '1'} />
+            <ProbBox label="EMPATE" value={probs.prob_X} highlight={result === 'X'} />
+            <ProbBox label="FORA" value={probs.prob_2} highlight={result === '2'} />
+            <ProbBox label="OVER 2.5" value={probs.prob_over_2_5} highlight={isOver25} />
+          </div>
+      </div>
+    </div>
+  );
+}
+
 function AnalysisDisplay({ homeTeam, awayTeam, lambdaHome, lambdaAway, competition, date, user }) {
   const [mustWinHome, setMustWinHome] = useState(1);
   const [mustWinAway, setMustWinAway] = useState(1);
@@ -170,14 +198,19 @@ function AnalysisDisplay({ homeTeam, awayTeam, lambdaHome, lambdaAway, competiti
     <div className="bg-white shadow-lg rounded-2xl overflow-hidden border border-gray-200 mt-6 transition-all duration-300 animate-fade-in-up">
       <div className="bg-gradient-to-r from-site-primary-900 to-site-primary-700 px-6 py-5 text-white text-center relative overflow-hidden">
          <div className="absolute top-0 left-0 w-full h-full bg-white opacity-5 transform -skew-x-12"></div>
-        <span className="relative z-10 text-[10px] font-bold uppercase tracking-widest bg-black/20 px-2 py-1 rounded text-site-primary-50">{LEAGUE_NAMES[competition] || competition}</span>
-        <h2 className="relative z-10 text-3xl font-black mt-3 tracking-tight">{homeTeam} <span className="text-white/80 text-xl font-light mx-2">vs</span> {awayTeam}</h2>
-        <p className="relative z-10 text-xs font-medium text-site-primary-200 mt-2 uppercase tracking-wide">{date ? `${new Date(date).toLocaleDateString('pt-BR')} • ${new Date(date).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}` : 'Simulação Personalizada'}</p>
+        <span className="relative z-10 text-[10px] font-bold uppercase tracking-widest bg-black/20 px-2 py-1 rounded text-site-primary-50">
+          {LEAGUE_NAMES[competition] || competition}
+        </span>
+        <h2 className="relative z-10 text-3xl font-black mt-3 tracking-tight">
+          {homeTeam} <span className="text-white/80 text-xl font-light mx-2">vs</span> {awayTeam}
+        </h2>
+        <p className="relative z-10 text-xs font-medium text-site-primary-200 mt-2 uppercase tracking-wide">
+          {date ? `${new Date(date).toLocaleDateString('pt-BR')} • ${new Date(date).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}` : 'Simulação Personalizada'}
+        </p>
         <button onClick={handleSave} disabled={saved} className={`absolute top-4 right-4 z-20 p-2 rounded-full transition-all ${saved ? 'bg-green-500 text-white cursor-default' : 'bg-white/10 hover:bg-white/20 text-white'}`} title="Salvar Palpite">
           {saved ? <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg> : <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" /></svg>}
         </button>
       </div>
-
       <div className="p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-4 space-y-6">
           <div className="bg-gray-50 p-4 rounded-xl border border-gray-200/60">
@@ -192,16 +225,13 @@ function AnalysisDisplay({ homeTeam, awayTeam, lambdaHome, lambdaAway, competiti
             <SliderInput label="Desfalques" value={desfalquesAway} setValue={setDesfalquesAway} min="0.5" max="1" />
           </div>
         </div>
-
         <div className="lg:col-span-8 flex flex-col">
-          {/* GRID DE ODDS INTERATIVO */}
           <div className="grid grid-cols-4 gap-3 mb-6">
             <OddBox label="CASA" probability={probs.prob_1} />
             <OddBox label="EMPATE" probability={probs.prob_X} />
             <OddBox label="FORA" probability={probs.prob_2} />
             <OddBox label="OVER 2.5" probability={probs.prob_over_2_5} />
           </div>
-          
           <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-inner flex-grow flex flex-col justify-center items-center">
              <ScoreTable matrix={probs.matrix} homeTeam={homeTeam} awayTeam={awayTeam} />
           </div>
@@ -211,54 +241,24 @@ function AnalysisDisplay({ homeTeam, awayTeam, lambdaHome, lambdaAway, competiti
   );
 }
 
-// --- DISPLAY DE HISTÓRICO (Simplificado, sem odds) ---
-function HistoryMatchDisplay({ match }) {
-  const probs = calculateProbabilities(match.lambda_home, match.lambda_away);
-  const result = match.scoreHome > match.scoreAway ? '1' : match.scoreAway > match.scoreHome ? '2' : 'X';
-  const totalGoals = match.scoreHome + match.scoreAway;
-  const isOver25 = totalGoals > 2.5;
-
-  // Componente Simples para Histórico
-  const SimpleBox = ({ label, value, highlight }) => {
-    const colorClass = highlight ? "bg-purple-100 text-purple-800 border-purple-400 ring-2 ring-purple-400" : "bg-white text-gray-600 border-gray-200";
-    return (
-      <div className={`flex flex-col items-center p-2 rounded-lg border ${colorClass} flex-1`}>
-        <span className="text-[10px] font-bold mb-0.5">{label}</span>
-        <span className="text-lg font-extrabold">{value.toFixed(1)}%</span>
-      </div>
-    );
-  };
-
-  return (
-    <div className="bg-white shadow rounded-2xl overflow-hidden border border-gray-200 mt-4 animate-fade-in-up">
-      <div className="bg-gray-800 px-6 py-4 text-white text-center relative overflow-hidden">
-        <span className="relative z-10 text-[10px] font-bold uppercase tracking-widest bg-black/30 px-2 py-1 rounded text-gray-200">{LEAGUE_NAMES[match.competition_code] || match.competition} • Finalizado</span>
-        <div className="relative z-10 mt-2 flex justify-center items-center space-x-4">
-           <span className="text-xl font-bold text-right w-1/3">{match.homeTeam}</span>
-           <div className="bg-white text-gray-900 px-4 py-1 rounded-lg font-black text-2xl shadow-lg">{match.scoreHome} - {match.scoreAway}</div>
-           <span className="text-xl font-bold text-left w-1/3">{match.awayTeam}</span>
-        </div>
-        <p className="relative z-10 text-xs font-medium text-gray-400 mt-2 uppercase tracking-wide">{new Date(match.utcDate).toLocaleDateString('pt-BR')}</p>
-      </div>
-      <div className="p-6">
-          <p className="text-xs text-center font-bold text-gray-400 uppercase mb-4">O que o modelo previu:</p>
-          <div className="grid grid-cols-4 gap-3">
-            <SimpleBox label="CASA" value={probs.prob_1} highlight={result === '1'} />
-            <SimpleBox label="EMPATE" value={probs.prob_X} highlight={result === 'X'} />
-            <SimpleBox label="FORA" value={probs.prob_2} highlight={result === '2'} />
-            <SimpleBox label="OVER 2.5" value={probs.prob_over_2_5} highlight={isOver25} />
-          </div>
-      </div>
-    </div>
-  );
-}
-
-// --- Componente para Exibir Palpites Salvos ---
+// --- Componente para Exibir Palpites Salvos (ATUALIZADO) ---
 function SavedMatchDisplay({ match, onDelete }) {
   const probs = calculateProbabilities(match.lambdaHome, match.lambdaAway);
-  // Reutilizamos o SimpleBox para palpites salvos também (ou pode ser o OddBox se quiser salvar a odd)
-  const SimpleBox = ({ label, value }) => (
-    <div className="flex flex-col items-center p-2 rounded-lg border bg-white text-gray-600 border-gray-200 flex-1">
+  
+  // Verifica se o jogo já terminou (tem placar)
+  const isFinished = match.status === 'FINISHED' || (match.finalScoreHome !== undefined);
+  
+  // Calcula quem venceu para destacar
+  const result = isFinished 
+    ? (match.finalScoreHome > match.finalScoreAway ? '1' 
+      : match.finalScoreAway > match.finalScoreHome ? '2' : 'X')
+    : null;
+  
+  const totalGoals = match.finalScoreHome + match.finalScoreAway;
+  const isOver25 = totalGoals > 2.5;
+
+  const SimpleBox = ({ label, value, highlight }) => (
+    <div className={`flex flex-col items-center p-2 rounded-lg border flex-1 transition-all ${highlight ? "bg-purple-100 text-purple-800 border-purple-400 ring-2 ring-purple-400" : "bg-white text-gray-600 border-gray-200"}`}>
       <span className="text-[10px] font-bold mb-0.5">{label}</span>
       <span className="text-lg font-extrabold">{value.toFixed(1)}%</span>
     </div>
@@ -269,22 +269,38 @@ function SavedMatchDisplay({ match, onDelete }) {
       <button onClick={() => onDelete(match.id)} className="absolute top-2 right-2 z-20 bg-red-100 text-red-500 p-1.5 rounded-full hover:bg-red-500 hover:text-white transition-all opacity-100 md:opacity-0 group-hover:opacity-100" title="Excluir">
         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
       </button>
-      <div className="bg-indigo-50 px-6 py-3 text-center border-b border-indigo-100">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-400 block mb-1">{LEAGUE_NAMES[match.competition] || match.competition}</span>
-        <div className="flex justify-center items-center space-x-2"><span className="text-lg font-bold text-site-primary-900">{match.homeTeam}</span><span className="text-sm text-gray-400">vs</span><span className="text-lg font-bold text-site-primary-900">{match.awayTeam}</span></div>
-        <p className="text-[10px] text-gray-400 mt-1">Salvo em: {new Date(match.savedAt.seconds * 1000).toLocaleDateString('pt-BR')}</p>
+      <div className={`${isFinished ? 'bg-gray-800 text-white' : 'bg-indigo-50 text-indigo-900'} px-6 py-3 text-center border-b border-indigo-100 transition-colors`}>
+        <span className={`text-[10px] font-bold uppercase tracking-widest block mb-1 ${isFinished ? 'text-gray-400' : 'text-indigo-400'}`}>
+          {LEAGUE_NAMES[match.competition] || match.competition}
+          {isFinished && " • FINALIZADO"}
+        </span>
+        
+        <div className="flex justify-center items-center space-x-2">
+           <span className="text-lg font-bold">{match.homeTeam}</span>
+           
+           {isFinished ? (
+             <span className="bg-white text-gray-900 px-3 py-0.5 rounded font-black text-xl shadow">
+               {match.finalScoreHome} - {match.finalScoreAway}
+             </span>
+           ) : (
+             <span className="text-sm opacity-60">vs</span>
+           )}
+           
+           <span className="text-lg font-bold">{match.awayTeam}</span>
+        </div>
+        <p className={`text-[10px] mt-1 ${isFinished ? 'text-gray-500' : 'text-indigo-300'}`}>Salvo em: {new Date(match.savedAt.seconds * 1000).toLocaleDateString('pt-BR')}</p>
       </div>
       <div className="p-4"><div className="grid grid-cols-4 gap-2">
-        <SimpleBox label="CASA" value={probs.prob_1} />
-        <SimpleBox label="EMPATE" value={probs.prob_X} />
-        <SimpleBox label="FORA" value={probs.prob_2} />
-        <SimpleBox label="OVER 2.5" value={probs.prob_over_2_5} />
+        <SimpleBox label="CASA" value={probs.prob_1} highlight={result === '1'} />
+        <SimpleBox label="EMPATE" value={probs.prob_X} highlight={result === 'X'} />
+        <SimpleBox label="FORA" value={probs.prob_2} highlight={result === '2'} />
+        <SimpleBox label="OVER 2.5" value={probs.prob_over_2_5} highlight={isFinished && isOver25} />
       </div></div>
     </div>
   );
 }
 
-// --- Modal Login (Mantido igual) ---
+// --- Modal Login (Mantido) ---
 function LoginModal({ isOpen, onClose, onLoginSuccess }) {
   const [isRegistering, setIsRegistering] = useState(false);
   const [email, setEmail] = useState("");
@@ -313,7 +329,7 @@ function LoginModal({ isOpen, onClose, onLoginSuccess }) {
   );
 }
 
-// --- App (Mantido igual) ---
+// --- App (Mantido) ---
 function App() {
   const [allMatches, setAllMatches] = useState([]);
   const [allTeams, setAllTeams] = useState([]);
