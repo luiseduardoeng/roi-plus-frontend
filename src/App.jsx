@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { db, auth } from './firebaseConfig'; 
 import { collection, getDocs, query, orderBy, addDoc, deleteDoc, doc, where } from 'firebase/firestore';
-import { signInWithEmailAndPassword, createUserWithAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
 import { factorial } from 'mathjs';
 import './App.css';
 import logoImg from './assets/logo.png';
@@ -49,8 +49,7 @@ function calculateProbabilities(lambdaHome, lambdaAway) {
   };
 }
 
-// --- COMPONENTES VISUAIS (Tailwind/JSX) ---
-
+// --- Componentes UI (Mantidos) ---
 const SliderInput = ({ label, value, setValue, min, max }) => (
   <div className="flex flex-col mb-3 group">
     <div className="flex justify-between items-center mb-1">
@@ -177,10 +176,8 @@ function AnalysisDisplay({ homeTeam, awayTeam, homeCrest, awayCrest, lambdaHomeF
     setMustWinHome(1); setMustWinAway(1); setDesfalquesHome(1); setDesfalquesAway(1); setMando(1); setSaved(false); setMode('ft');
   }, [homeTeam, awayTeam]);
 
-  // NOVO: Seleciona Lambda baseado no modo (FT ou HT)
   const baseLambdaHome = mode === 'ft' ? lambdaHomeFT : lambdaHomeHT;
   const baseLambdaAway = mode === 'ft' ? lambdaAwayFT : lambdaAwayHT;
-  
   const adjustedLambdaHome = baseLambdaHome * mustWinHome * desfalquesHome * mando;
   const adjustedLambdaAway = baseLambdaAway * mustWinAway * desfalquesAway;
   const probs = calculateProbabilities(adjustedLambdaHome, adjustedLambdaAway);
@@ -190,7 +187,6 @@ function AnalysisDisplay({ homeTeam, awayTeam, homeCrest, awayCrest, lambdaHomeF
     try {
       await addDoc(collection(db, "users_saved_matches"), {
         userId: user.uid, savedAt: new Date(), homeTeam, awayTeam, competition,
-        // Salva os lambdas da Análise FT, pois é o que vai ser conferido depois
         lambdaHome: lambdaHomeFT * mustWinHome * desfalquesHome * mando, 
         lambdaAway: lambdaAwayFT * mustWinAway * desfalquesAway, 
         originalDate: date
@@ -219,7 +215,7 @@ function AnalysisDisplay({ homeTeam, awayTeam, homeCrest, awayCrest, lambdaHomeF
             {/* Escudos Mandante */}
             <div className="flex flex-col items-center w-1/3 group">
                <div className="relative">
-                  {homeCrest ? <img src={homeCrest} alt={homeTeam} className="h-20 w-20 object-contain mb-3 drop-shadow-2xl transform group-hover:scale-110 transition-transform duration-300" /> : <div className="h-20 w-20 bg-white/10 rounded-full mb-3 flex items-center justify-center text-3xl border border-white/10">⚽</div>}
+                  {homeCrest ? <img src={homeCrest} alt={homeTeam} className="h-20 w-20 object-contain mb-3 drop-shadow-2xl transform group-hover:scale-110 transition-transform duration-300" /> : <div className="h-20 w-20 bg-white/5 rounded-full mb-3 flex items-center justify-center text-3xl border border-white/10">⚽</div>}
                   <div className="absolute inset-0 bg-cyan-500 blur-2xl opacity-0 group-hover:opacity-20 transition-opacity duration-500 rounded-full"></div>
                </div>
                <h2 className="text-xl md:text-2xl font-bold leading-tight text-gray-100">{homeTeam}</h2>
@@ -232,12 +228,13 @@ function AnalysisDisplay({ homeTeam, awayTeam, homeCrest, awayCrest, lambdaHomeF
                   xG: <span className="text-white">{adjustedLambdaHome.toFixed(2)}</span> - <span className="text-white">{adjustedLambdaAway.toFixed(2)}</span>
                </div>
                
-               {/* NOVO: Detalhes do Jogo */}
-               {matchDetails && (
+               {/* Detalhes do Jogo */}
+               {date && matchDetails && (
                   <div className="mt-4 flex flex-col items-center space-y-1 text-gray-400">
                     <span className="text-[10px] font-medium tracking-widest uppercase text-gray-500">
-                       {matchDetails.matchday ? `Rodada ${matchDetails.matchday}` : date ? 'Agendado' : 'Simulação'}
+                       {matchDetails.matchday ? `Rodada ${matchDetails.matchday}` : STATUS_TRANSLATE[matchDetails.status] || matchDetails.status}
                     </span>
+                    
                     <div className="flex space-x-2 items-center text-[10px]">
                         <span className={`uppercase tracking-wider ${matchDetails.status === 'IN_PLAY' ? 'text-red-500 animate-pulse font-bold' : 'text-gray-600'}`}>
                             {STATUS_TRANSLATE[matchDetails.status] || matchDetails.status}
@@ -248,6 +245,7 @@ function AnalysisDisplay({ homeTeam, awayTeam, homeCrest, awayCrest, lambdaHomeF
                            <span>{matchDetails.venue || 'Local Desconhecido'}</span>
                         </span>
                     </div>
+                    
                     {matchDetails.referee && matchDetails.referee !== "Árbitro não informado" && (
                          <span className="flex items-center space-x-1 text-[10px] text-gray-600">
                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
@@ -312,10 +310,50 @@ function AnalysisDisplay({ homeTeam, awayTeam, homeCrest, awayCrest, lambdaHomeF
   );
 }
 
-// --- Outros Componentes (Histórico, Salvos, Modal) ---
-// (Componentes menores, mantidos e adaptados para o Dark Mode)
+// --- Outros Componentes (Histórico, Salvos, Modal) (Adaptados) ---
 
-// --- App Principal (Mantido) ---
+function HistoryMatchDisplay({ match }) {
+  const probs = calculateProbabilities(match.lambda_home, match.lambda_away);
+  const result = match.scoreHome > match.scoreAway ? '1' : match.scoreAway > match.scoreHome ? '2' : 'X';
+  const isOver25 = (match.scoreHome + match.scoreAway) > 2.5;
+
+  return (
+    <div className="bg-[#16202a] shadow-lg rounded-2xl overflow-hidden border border-gray-800 mt-4 animate-fade-in-up">
+      <div className="bg-slate-900/80 px-6 py-3 text-center border-b border-gray-800">
+        <span className="text-[10px] font-bold uppercase text-gray-500 tracking-widest">{LEAGUE_NAMES[match.competition_code] || match.competition} • Finalizado</span>
+        <div className="flex justify-center items-center space-x-4 mt-2"><span className="text-lg font-bold w-1/3 text-right text-gray-300">{match.homeTeam}</span><span className="bg-gray-800 text-cyan-400 border border-gray-700 px-3 py-0.5 rounded font-black text-xl shadow-lg shadow-cyan-900/20">{match.scoreHome} - {match.scoreAway}</span><span className="text-lg font-bold w-1/3 text-left text-gray-300">{match.awayTeam}</span></div>
+        <p className="text-[10px] font-medium text-gray-600 mt-2">{new Date(match.utcDate).toLocaleDateString('pt-BR')}</p>
+      </div>
+      <div className="p-4 grid grid-cols-4 gap-2 bg-[#0b1219]">
+         <ProbBox label="CASA" value={probs.prob_1} highlight={result === '1'} />
+         <ProbBox label="EMPATE" value={probs.prob_X} highlight={result === 'X'} />
+         <ProbBox label="FORA" value={probs.prob_2} highlight={result === '2'} />
+         <ProbBox label="OVER 2.5" value={probs.prob_over_2_5} highlight={isOver25} />
+      </div>
+    </div>
+  );
+}
+
+function SavedMatchDisplay({ match, onDelete }) {
+    const probs = calculateProbabilities(match.lambdaHome, match.lambdaAway);
+    const isFinished = match.status === 'FINISHED' || (match.finalScoreHome !== undefined);
+    const result = isFinished ? (match.finalScoreHome > match.finalScoreAway ? '1' : match.finalScoreAway > match.finalScoreHome ? '2' : 'X') : null;
+    const SimpleBox = ({ label, value, highlight }) => (<div className={`flex flex-col items-center p-2 rounded-lg border flex-1 transition-all ${highlight ? "bg-purple-500/20 text-purple-300 border-purple-500/50 ring-1 ring-purple-500" : "bg-slate-800/40 text-gray-500 border-gray-800"}`}><span className="text-[10px] font-bold mb-0.5 opacity-70">{label}</span><span className="text-lg font-extrabold">{value.toFixed(1)}%</span></div>);
+    return (
+      <div className="bg-[#16202a] shadow-lg rounded-2xl overflow-hidden border border-gray-800 mt-4 relative group">
+        <button onClick={() => onDelete(match.id)} className="absolute top-2 right-2 z-20 bg-red-500/10 text-red-500 p-1.5 rounded-full hover:bg-red-500 hover:text-white transition-all opacity-100 md:opacity-0 group-hover:opacity-100"><svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+        <div className={`${isFinished ? 'bg-slate-950' : 'bg-slate-900'} px-6 py-3 text-center border-b border-gray-800 transition-colors`}>
+          <span className={`text-[10px] font-bold uppercase tracking-widest block mb-1 ${isFinished ? 'text-gray-600' : 'text-cyan-600'}`}>{LEAGUE_NAMES[match.competition] || match.competition} {isFinished && "• FINALIZADO"}</span>
+          <div className="flex justify-center items-center space-x-2"><span className="text-lg font-bold text-gray-200">{match.homeTeam}</span>{isFinished ? <span className="bg-gray-800 text-white border border-gray-700 px-3 py-0.5 rounded font-black text-lg">{match.finalScoreHome}-{match.finalScoreAway}</span> : <span className="text-sm text-gray-600">vs</span>}<span className="text-lg font-bold text-gray-200">{match.awayTeam}</span></div>
+          <p className={`text-[10px] mt-1 ${isFinished ? 'text-gray-600' : 'text-gray-500'}`}>Salvo em: {new Date(match.savedAt.seconds * 1000).toLocaleDateString('pt-BR')}</p>
+        </div>
+        <div className="p-4 bg-[#0b1219]"><div className="grid grid-cols-4 gap-2"><SimpleBox label="1" value={probs.prob_1} highlight={result === '1'} /><SimpleBox label="X" value={probs.prob_X} highlight={result === 'X'} /><SimpleBox label="2" value={probs.prob_2} highlight={result === '2'} /><SimpleBox label="+2.5" value={probs.prob_over_2_5} highlight={isFinished && (match.finalScoreHome + match.finalScoreAway) > 2.5} /></div></div>
+      </div>
+    );
+}
+
+function LoginModal({ isOpen, onClose, onLoginSuccess }) { /* Login Modal */ }
+
 function App() {
   const [allMatches, setAllMatches] = useState([]);
   const [allTeams, setAllTeams] = useState([]);
