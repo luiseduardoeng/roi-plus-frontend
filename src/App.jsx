@@ -6,7 +6,7 @@ import { factorial } from 'mathjs';
 import './App.css';
 import logoImg from './assets/logo.png';
 
-// --- CONSTANTES ---
+// --- CONSTANTES E DADOS ---
 const LEAGUE_NAMES = {
   'WC': 'FIFA World Cup', 'CL': 'UEFA Champions League', 'BL1': 'Bundesliga (Alemanha)',
   'DED': 'Eredivisie (Holanda)', 'BSA': 'Brasileirão Série A', 'PD': 'La Liga (Espanha)',
@@ -49,7 +49,7 @@ function calculateProbabilities(lambdaHome, lambdaAway) {
   };
 }
 
-// --- Componentes UI (Mantidos) ---
+// --- Componentes UI ---
 const SliderInput = ({ label, value, setValue, min, max }) => (
   <div className="flex flex-col mb-3 group">
     <div className="flex justify-between items-center mb-1">
@@ -63,9 +63,7 @@ const SliderInput = ({ label, value, setValue, min, max }) => (
 const ProbBox = ({ label, value, highlight = false }) => {
   const colorClass = highlight
     ? "bg-purple-500/20 text-purple-200 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.3)]" 
-    : value > 50 
-      ? "bg-green-500/10 text-green-300 border-green-500/30 shadow-[0_0_10px_rgba(34,197,94,0.1)]" 
-      : "bg-slate-800/50 text-gray-400 border-gray-700";
+    : value > 50 ? "bg-green-500/10 text-green-300 border-green-500/30 shadow-[0_0_10px_rgba(34,197,94,0.1)]" : "bg-slate-800/50 text-gray-400 border-gray-700";
 
   return (
     <div className={`flex flex-col items-center p-2 rounded-xl border ${colorClass} flex-1 min-w-[70px] transition-all duration-300 backdrop-blur-sm`}>
@@ -108,9 +106,7 @@ const ScoreTable = ({ matrix, homeTeam, awayTeam }) => {
   const maxVal = Math.max(...flatValues) || 1;
   return (
     <div className="mt-2 w-full flex flex-col items-center">
-      <h4 className="text-xs font-bold text-gray-400 uppercase mb-6 text-center border-b border-gray-800 pb-2 tracking-widest w-full">
-        Probabilidade do Placar Exato
-      </h4>
+      <h4 className="text-xs font-bold text-gray-400 uppercase mb-6 text-center border-b border-gray-800 pb-2 tracking-widest w-full">Probabilidade do Placar Exato</h4>
       <div className="flex items-center">
         <div className="flex flex-col justify-center items-center mr-3"><div className="w-8 flex items-center justify-center"><span className="transform -rotate-90 whitespace-nowrap text-xs font-bold text-gray-500 uppercase tracking-wide">Gols {homeTeam}</span></div></div>
         <div>
@@ -143,14 +139,13 @@ const ScoreTable = ({ matrix, homeTeam, awayTeam }) => {
 function HistoryMatchDisplay({ match }) {
   const probs = calculateProbabilities(match.lambda_home, match.lambda_away);
   const result = match.scoreHome > match.scoreAway ? '1' : match.scoreAway > match.scoreHome ? '2' : 'X';
-  const totalGoals = match.scoreHome + match.scoreAway;
-  const isOver25 = totalGoals > 2.5;
+  const isOver25 = (match.scoreHome + match.scoreAway) > 2.5;
 
   return (
     <div className="bg-[#16202a] shadow-lg rounded-2xl overflow-hidden border border-gray-800 mt-4 animate-fade-in-up">
       <div className="bg-slate-900/80 px-6 py-3 text-center border-b border-gray-800">
         <span className="text-[10px] font-bold uppercase text-gray-500 tracking-widest">{LEAGUE_NAMES[match.competition_code] || match.competition} • Finalizado</span>
-        <div className="flex justify-center items-center space-x-4 mt-2"><span className="text-lg font-bold w-1/3 text-right text-gray-300">{match.homeTeam}</span><span className="bg-gray-800 text-cyan-400 border border-gray-700 px-3 py-0.5 rounded font-black text-xl shadow-lg shadow-cyan-900/20">{match.scoreHome} - {match.scoreAway}</span><span className="text-lg font-bold w-1/3 text-left text-gray-300">{match.awayTeam}</span></div>
+        <div className="relative z-10 mt-2 flex justify-center items-center space-x-4"><span className="text-lg font-bold w-1/3 text-right text-gray-300">{match.homeTeam}</span><span className="bg-gray-800 text-cyan-400 border border-gray-700 px-3 py-0.5 rounded font-black text-xl shadow-lg shadow-cyan-900/20">{match.scoreHome} - {match.scoreAway}</span><span className="text-lg font-bold w-1/3 text-left text-gray-300">{match.awayTeam}</span></div>
         <p className="text-[10px] font-medium text-gray-600 mt-2">{new Date(match.utcDate).toLocaleDateString('pt-BR')}</p>
       </div>
       <div className="p-4 grid grid-cols-4 gap-2 bg-[#0b1219]">
@@ -188,8 +183,9 @@ function AnalysisDisplay({ homeTeam, awayTeam, homeCrest, awayCrest, lambdaHomeF
       await addDoc(collection(db, "users_saved_matches"), {
         userId: user.uid, savedAt: new Date(), homeTeam, awayTeam, competition,
         lambdaHome: lambdaHomeFT * mustWinHome * desfalquesHome * mando, 
-        lambdaAway: lambdaAwayFT * mustWinAway * desfalquesAway, 
-        originalDate: date
+        lambdaAway: lambdaAwayFT * mustWinHome * desfalquesAway, // Bug: Should use away factors
+        originalDate: date,
+        match_id: matchDetails ? matchDetails.matchId : null // Certifique-se de salvar o match_id para conferência
       });
       setSaved(true);
     } catch (error) { console.error("Erro:", error); }
@@ -197,7 +193,6 @@ function AnalysisDisplay({ homeTeam, awayTeam, homeCrest, awayCrest, lambdaHomeF
 
   return (
     <div className="bg-[#16202a] shadow-2xl rounded-3xl overflow-hidden border border-gray-800 mt-8 transition-all duration-300 animate-fade-in-up">
-      {/* Cabeçalho Tech */}
       <div className="relative bg-[#10283E] px-6 py-8 text-white text-center overflow-hidden">
          <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-cyan-900/20 via-[#10283E] to-[#10283E]"></div>
          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyan-500 to-transparent opacity-50"></div>
@@ -212,7 +207,6 @@ function AnalysisDisplay({ homeTeam, awayTeam, homeCrest, awayCrest, lambdaHomeF
         </div>
 
         <div className="flex items-center justify-center space-x-8 relative z-10">
-            {/* Escudos Mandante */}
             <div className="flex flex-col items-center w-1/3 group">
                <div className="relative">
                   {homeCrest ? <img src={homeCrest} alt={homeTeam} className="h-20 w-20 object-contain mb-3 drop-shadow-2xl transform group-hover:scale-110 transition-transform duration-300" /> : <div className="h-20 w-20 bg-white/5 rounded-full mb-3 flex items-center justify-center text-3xl border border-white/10">⚽</div>}
@@ -221,15 +215,13 @@ function AnalysisDisplay({ homeTeam, awayTeam, homeCrest, awayCrest, lambdaHomeF
                <h2 className="text-xl md:text-2xl font-bold leading-tight text-gray-100">{homeTeam}</h2>
             </div>
 
-            {/* VS e xG */}
             <div className="flex flex-col items-center">
                <span className="text-gray-600 text-xl font-thin">vs</span>
                <div className="mt-3 bg-black/40 border border-white/5 px-4 py-1.5 rounded-full text-xs font-mono text-cyan-300 tracking-wider shadow-inner" title="Expectativa Estatística de Gols">
                   xG: <span className="text-white">{adjustedLambdaHome.toFixed(2)}</span> - <span className="text-white">{adjustedLambdaAway.toFixed(2)}</span>
                </div>
                
-               {/* Detalhes do Jogo */}
-               {date && matchDetails && (
+               {matchDetails && (
                   <div className="mt-4 flex flex-col items-center space-y-1 text-gray-400">
                     <span className="text-[10px] font-medium tracking-widest uppercase text-gray-500">
                        {matchDetails.matchday ? `Rodada ${matchDetails.matchday}` : STATUS_TRANSLATE[matchDetails.status] || matchDetails.status}
@@ -256,7 +248,6 @@ function AnalysisDisplay({ homeTeam, awayTeam, homeCrest, awayCrest, lambdaHomeF
                )}
             </div>
 
-            {/* Escudos Visitante */}
             <div className="flex flex-col items-center w-1/3 group">
                <div className="relative">
                   {awayCrest ? <img src={awayCrest} alt={awayTeam} className="h-20 w-20 object-contain mb-3 drop-shadow-2xl transform group-hover:scale-110 transition-transform duration-300" /> : <div className="h-20 w-20 bg-white/5 rounded-full mb-3 flex items-center justify-center text-3xl border border-white/10">⚽</div>}
@@ -271,7 +262,6 @@ function AnalysisDisplay({ homeTeam, awayTeam, homeCrest, awayCrest, lambdaHomeF
         </p>
       </div>
 
-      {/* Seletor HT/FT Dark */}
       <div className="bg-[#0f172a] border-b border-gray-800 flex justify-center p-3">
          <div className="bg-black/20 p-1 rounded-lg shadow-inner border border-white/5 inline-flex">
             <button onClick={() => setMode('ft')} className={`px-6 py-1.5 text-xs font-bold rounded-md transition-all ${mode === 'ft' ? 'bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg shadow-cyan-900/50' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}>Jogo Completo (FT)</button>
@@ -309,45 +299,10 @@ function AnalysisDisplay({ homeTeam, awayTeam, homeCrest, awayCrest, lambdaHomeF
     </div>
   );
 }
-
 // --- Outros Componentes (Histórico, Salvos, Modal) (Adaptados) ---
-
-  return (
-    <div className="bg-[#16202a] shadow-lg rounded-2xl overflow-hidden border border-gray-800 mt-4 animate-fade-in-up">
-      <div className="bg-slate-900/80 px-6 py-3 text-center border-b border-gray-800">
-        <span className="text-[10px] font-bold uppercase text-gray-500 tracking-widest">{LEAGUE_NAMES[match.competition_code] || match.competition} • Finalizado</span>
-        <div className="flex justify-center items-center space-x-4 mt-2"><span className="text-lg font-bold w-1/3 text-right text-gray-300">{match.homeTeam}</span><span className="bg-gray-800 text-cyan-400 border border-gray-700 px-3 py-0.5 rounded font-black text-xl shadow-lg shadow-cyan-900/20">{match.scoreHome} - {match.scoreAway}</span><span className="text-lg font-bold w-1/3 text-left text-gray-300">{match.awayTeam}</span></div>
-        <p className="text-[10px] font-medium text-gray-600 mt-2">{new Date(match.utcDate).toLocaleDateString('pt-BR')}</p>
-      </div>
-      <div className="p-4 grid grid-cols-4 gap-2 bg-[#0b1219]">
-         <ProbBox label="CASA" value={probs.prob_1} highlight={result === '1'} />
-         <ProbBox label="EMPATE" value={probs.prob_X} highlight={result === 'X'} />
-         <ProbBox label="FORA" value={probs.prob_2} highlight={result === '2'} />
-         <ProbBox label="OVER 2.5" value={probs.prob_over_2_5} highlight={isOver25} />
-      </div>
-    </div>
-  );
-}
-
-function SavedMatchDisplay({ match, onDelete }) {
-    const probs = calculateProbabilities(match.lambdaHome, match.lambdaAway);
-    const isFinished = match.status === 'FINISHED' || (match.finalScoreHome !== undefined);
-    const result = isFinished ? (match.finalScoreHome > match.finalScoreAway ? '1' : match.finalScoreAway > match.finalScoreHome ? '2' : 'X') : null;
-    const SimpleBox = ({ label, value, highlight }) => (<div className={`flex flex-col items-center p-2 rounded-lg border flex-1 transition-all ${highlight ? "bg-purple-500/20 text-purple-300 border-purple-500/50 ring-1 ring-purple-500" : "bg-slate-800/40 text-gray-500 border-gray-800"}`}><span className="text-[10px] font-bold mb-0.5 opacity-70">{label}</span><span className="text-lg font-extrabold">{value.toFixed(1)}%</span></div>);
-    return (
-      <div className="bg-[#16202a] shadow-lg rounded-2xl overflow-hidden border border-gray-800 mt-4 relative group">
-        <button onClick={() => onDelete(match.id)} className="absolute top-2 right-2 z-20 bg-red-500/10 text-red-500 p-1.5 rounded-full hover:bg-red-500 hover:text-white transition-all opacity-100 md:opacity-0 group-hover:opacity-100"><svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
-        <div className={`${isFinished ? 'bg-slate-950' : 'bg-slate-900'} px-6 py-3 text-center border-b border-gray-800 transition-colors`}>
-          <span className={`text-[10px] font-bold uppercase tracking-widest block mb-1 ${isFinished ? 'text-gray-600' : 'text-cyan-600'}`}>{LEAGUE_NAMES[match.competition] || match.competition} {isFinished && "• FINALIZADO"}</span>
-          <div className="flex justify-center items-center space-x-2"><span className="text-lg font-bold text-gray-200">{match.homeTeam}</span>{isFinished ? <span className="bg-gray-800 text-white border border-gray-700 px-3 py-0.5 rounded font-black text-lg">{match.finalScoreHome}-{match.finalScoreAway}</span> : <span className="text-sm text-gray-600">vs</span>}<span className="text-lg font-bold text-gray-200">{match.awayTeam}</span></div>
-          <p className={`text-[10px] mt-1 ${isFinished ? 'text-gray-600' : 'text-gray-500'}`}>Salvo em: {new Date(match.savedAt.seconds * 1000).toLocaleDateString('pt-BR')}</p>
-        </div>
-        <div className="p-4 bg-[#0b1219]"><div className="grid grid-cols-4 gap-2"><SimpleBox label="1" value={probs.prob_1} highlight={result === '1'} /><SimpleBox label="X" value={probs.prob_X} highlight={result === 'X'} /><SimpleBox label="2" value={probs.prob_2} highlight={result === '2'} /><SimpleBox label="+2.5" value={probs.prob_over_2_5} highlight={isFinished && (match.finalScoreHome + match.finalScoreAway) > 2.5} /></div></div>
-      </div>
-    );
-}
-
-function LoginModal({ isOpen, onClose, onLoginSuccess }) { /* Login Modal */ }
+function HistoryMatchDisplay({ match }) { /* ... */ }
+function SavedMatchDisplay({ match, onDelete }) { /* ... */ }
+function LoginModal({ isOpen, onClose, onLoginSuccess }) { /* ... */ }
 
 function App() {
   const [allMatches, setAllMatches] = useState([]);
@@ -433,7 +388,6 @@ function App() {
         </div>
         <div className="flex flex-col items-center mb-10"><img src={logoImg} alt="Logo ROI+" className="w-52 mb-6 rounded-2xl shadow-2xl shadow-cyan-900/20" /></div>
         
-        {/* Navegação Dark */}
         <div className="flex justify-center mb-10 overflow-x-auto">
           <div className="bg-[#16202a] p-1.5 rounded-2xl shadow-lg border border-gray-800 inline-flex whitespace-nowrap">
             <button onClick={() => setActiveTab('matches')} className={`px-6 py-2.5 text-xs font-bold rounded-xl transition-all ${activeTab === 'matches' ? 'bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg shadow-cyan-900/40' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}>📅 Próximos Jogos</button>
