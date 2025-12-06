@@ -312,11 +312,6 @@ function AnalysisDisplay({ homeTeam, awayTeam, homeCrest, awayCrest, lambdaHomeF
 
 // --- Outros Componentes (Histórico, Salvos, Modal) (Adaptados) ---
 
-function HistoryMatchDisplay({ match }) {
-  const probs = calculateProbabilities(match.lambda_home, match.lambda_away);
-  const result = match.scoreHome > match.scoreAway ? '1' : match.scoreAway > match.scoreHome ? '2' : 'X';
-  const isOver25 = (match.scoreHome + match.scoreAway) > 2.5;
-
   return (
     <div className="bg-[#16202a] shadow-lg rounded-2xl overflow-hidden border border-gray-800 mt-4 animate-fade-in-up">
       <div className="bg-slate-900/80 px-6 py-3 text-center border-b border-gray-800">
