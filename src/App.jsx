@@ -300,9 +300,59 @@ function AnalysisDisplay({ homeTeam, awayTeam, homeCrest, awayCrest, lambdaHomeF
   );
 }
 // --- Outros Componentes (Histórico, Salvos, Modal) (Adaptados) ---
-function HistoryMatchDisplay({ match }) { /* ... */ }
-function SavedMatchDisplay({ match, onDelete }) { /* ... */ }
-function LoginModal({ isOpen, onClose, onLoginSuccess }) { /* ... */ }
+
+// --- Componente de Login Modal ---
+function LoginModal({ isOpen, onClose, onLoginSuccess }) {
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  if (!isOpen) return null;
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    try {
+      if (isRegistering) {
+        // Usando createUserWithEmailAndPassword (Cadastrar)
+        await createUserWithEmailAndPassword(auth, email, password);
+      } else {
+        // Usando signInWithEmailAndPassword (Login)
+        await signInWithEmailAndPassword(auth, email, password);
+      }
+      onLoginSuccess();
+      onClose();
+    } catch (err) {
+      setError(err.message.includes("auth/invalid-credential") ? "Email ou senha incorretos." : err.message);
+      // Aqui tratamos a mensagem de erro
+      if (err.message.includes("auth/email-already-in-use")) {
+          setError("O email fornecido já está em uso.");
+      } else if (err.message.includes("auth/weak-password")) {
+          setError("Senha deve ter pelo menos 6 caracteres.");
+      } else {
+          setError(err.message);
+      }
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 backdrop-blur-sm p-4">
+      <div className="bg-[#16202a] border border-gray-700 rounded-2xl shadow-2xl p-8 w-full max-w-md relative animate-fade-in-up">
+        <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-white">✕</button>
+        <h2 className="text-2xl font-black text-white mb-2 text-center">{isRegistering ? "Criar Conta" : "Bem-vindo"}</h2>
+        <p className="text-sm text-gray-400 text-center mb-6">Acesse análises avançadas do ROI+</p>
+        {error && <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm p-3 rounded-lg mb-4">{error}</div>}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email</label><input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="w-full p-3 rounded-lg border border-gray-700 bg-gray-900 text-white focus:ring-2 focus:ring-cyan-500 outline-none placeholder-gray-600" placeholder="seu@email.com" /></div>
+          <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Senha</label><input type="password" required value={password} onChange={e => setPassword(e.target.value)} className="w-full p-3 rounded-lg border border-gray-700 bg-gray-900 text-white focus:ring-2 focus:ring-cyan-500 outline-none" placeholder="******" /></div>
+          <button type="submit" className="w-full bg-gradient-to-r from-cyan-600 to-cyan-700 hover:from-cyan-500 hover:to-cyan-600 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-cyan-900/20">{isRegistering ? "Cadastrar" : "Entrar"}</button>
+        </form>
+        <div className="mt-6 text-center text-sm"><button onClick={() => setIsRegistering(!isRegistering)} className="text-cyan-500 font-semibold hover:underline">{isRegistering ? "Já tem conta? Faça Login" : "Não tem conta? Cadastre-se"}</button></div>
+      </div>
+    </div>
+  );
+}
 
 function App() {
   const [allMatches, setAllMatches] = useState([]);
