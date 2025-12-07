@@ -6,7 +6,7 @@ import { factorial } from 'mathjs';
 import './App.css';
 import logoImg from './assets/logo.png';
 
-// --- CONSTANTES E DADOS ---
+// --- CONSTANTES ---
 const LEAGUE_NAMES = {
   'WC': 'FIFA World Cup', 'CL': 'UEFA Champions League', 'BL1': 'Bundesliga (Alemanha)',
   'DED': 'Eredivisie (Holanda)', 'BSA': 'Brasileirão Série A', 'PD': 'La Liga (Espanha)',
@@ -63,7 +63,9 @@ const SliderInput = ({ label, value, setValue, min, max }) => (
 const ProbBox = ({ label, value, highlight = false }) => {
   const colorClass = highlight
     ? "bg-purple-500/20 text-purple-200 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.3)]" 
-    : value > 50 ? "bg-green-500/10 text-green-300 border-green-500/30 shadow-[0_0_10px_rgba(34,197,94,0.1)]" : "bg-slate-800/50 text-gray-400 border-gray-700";
+    : value > 50 
+      ? "bg-green-500/10 text-green-300 border-green-500/30 shadow-[0_0_10px_rgba(34,197,94,0.1)]" 
+      : "bg-slate-800/50 text-gray-400 border-gray-700";
 
   return (
     <div className={`flex flex-col items-center p-2 rounded-xl border ${colorClass} flex-1 min-w-[70px] transition-all duration-300 backdrop-blur-sm`}>
@@ -183,9 +185,9 @@ function AnalysisDisplay({ homeTeam, awayTeam, homeCrest, awayCrest, lambdaHomeF
       await addDoc(collection(db, "users_saved_matches"), {
         userId: user.uid, savedAt: new Date(), homeTeam, awayTeam, competition,
         lambdaHome: lambdaHomeFT * mustWinHome * desfalquesHome * mando, 
-        lambdaAway: lambdaAwayFT * mustWinHome * desfalquesAway, // Bug: Should use away factors
+        lambdaAway: lambdaAwayFT * mustWinAway * desfalquesAway,
         originalDate: date,
-        match_id: matchDetails ? matchDetails.matchId : null // Certifique-se de salvar o match_id para conferência
+        match_id: matchDetails ? matchDetails.matchId : null
       });
       setSaved(true);
     } catch (error) { console.error("Erro:", error); }
@@ -193,29 +195,29 @@ function AnalysisDisplay({ homeTeam, awayTeam, homeCrest, awayCrest, lambdaHomeF
 
   return (
     <div className="bg-[#16202a] shadow-2xl rounded-3xl overflow-hidden border border-gray-800 mt-8 transition-all duration-300 animate-fade-in-up">
+      {/* Cabeçalho Tech */}
       <div className="relative bg-[#10283E] px-6 py-8 text-white text-center overflow-hidden">
          <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-cyan-900/20 via-[#10283E] to-[#10283E]"></div>
          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyan-500 to-transparent opacity-50"></div>
         
-        <div className="relative z-10 flex justify-between items-start mb-4">
-             <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-400 bg-cyan-900/20 px-3 py-1 rounded-full border border-cyan-900/30">
-               {LEAGUE_NAMES[competition] || competition}
-             </span>
-             <button onClick={handleSave} disabled={saved} className={`p-2 rounded-full transition-all ${saved ? 'bg-green-500 text-white shadow-[0_0_15px_rgba(34,197,94,0.5)]' : 'bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white'}`} title="Salvar Palpite">
-                {saved ? <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg> : <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" /></svg>}
-             </button>
+        <div className="relative z-10 flex justify-end items-start mb-4">
+            <span className="invisible">.</span>
         </div>
 
         <div className="flex items-center justify-center space-x-8 relative z-10">
             <div className="flex flex-col items-center w-1/3 group">
                <div className="relative">
-                  {homeCrest ? <img src={homeCrest} alt={homeTeam} className="h-20 w-20 object-contain mb-3 drop-shadow-2xl transform group-hover:scale-110 transition-transform duration-300" /> : <div className="h-20 w-20 bg-white/5 rounded-full mb-3 flex items-center justify-center text-3xl border border-white/10">⚽</div>}
+                  {homeCrest ? <img src={homeCrest} alt={homeTeam} className="h-20 w-20 object-contain mb-3 drop-shadow-2xl transform group-hover:scale-110 transition-transform duration-300" /> : <div className="h-20 w-20 bg-white/10 rounded-full mb-3 flex items-center justify-center text-3xl border border-white/10">⚽</div>}
                   <div className="absolute inset-0 bg-cyan-500 blur-2xl opacity-0 group-hover:opacity-20 transition-opacity duration-500 rounded-full"></div>
                </div>
                <h2 className="text-xl md:text-2xl font-bold leading-tight text-gray-100">{homeTeam}</h2>
             </div>
 
             <div className="flex flex-col items-center">
+               {/* TÍTULO DO CAMPEONATO CENTRALIZADO */}
+               <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-400 bg-cyan-900/20 px-3 py-1 rounded-full border border-cyan-900/30 mb-2">
+                 {LEAGUE_NAMES[competition] || competition}
+               </span>
                <span className="text-gray-600 text-xl font-thin">vs</span>
                <div className="mt-3 bg-black/40 border border-white/5 px-4 py-1.5 rounded-full text-xs font-mono text-cyan-300 tracking-wider shadow-inner" title="Expectativa Estatística de Gols">
                   xG: <span className="text-white">{adjustedLambdaHome.toFixed(2)}</span> - <span className="text-white">{adjustedLambdaAway.toFixed(2)}</span>
@@ -250,7 +252,7 @@ function AnalysisDisplay({ homeTeam, awayTeam, homeCrest, awayCrest, lambdaHomeF
 
             <div className="flex flex-col items-center w-1/3 group">
                <div className="relative">
-                  {awayCrest ? <img src={awayCrest} alt={awayTeam} className="h-20 w-20 object-contain mb-3 drop-shadow-2xl transform group-hover:scale-110 transition-transform duration-300" /> : <div className="h-20 w-20 bg-white/5 rounded-full mb-3 flex items-center justify-center text-3xl border border-white/10">⚽</div>}
+                  {awayCrest ? <img src={awayCrest} alt={awayTeam} className="h-20 w-20 object-contain mb-3 drop-shadow-2xl transform group-hover:scale-110 transition-transform duration-300" /> : <div className="h-20 w-20 bg-white/10 rounded-full mb-3 flex items-center justify-center text-3xl border border-white/10">⚽</div>}
                   <div className="absolute inset-0 bg-purple-500 blur-2xl opacity-0 group-hover:opacity-20 transition-opacity duration-500 rounded-full"></div>
                </div>
                <h2 className="text-xl md:text-2xl font-bold leading-tight text-gray-100">{awayTeam}</h2>
@@ -258,15 +260,21 @@ function AnalysisDisplay({ homeTeam, awayTeam, homeCrest, awayCrest, lambdaHomeF
         </div>
 
         <p className="relative z-10 text-[10px] font-bold text-gray-500 mt-6 uppercase tracking-[0.15em]">
-          {date ? `${new Date(date).toLocaleDateString('pt-BR')} • ${new Date(date).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}` : 'Simulação'}
+          {date ? `${new Date(date).toLocaleDateString('pt-BR')}` : 'Simulação'} • {date ? `${new Date(date).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}` : 'Simulação'}
         </p>
       </div>
 
-      <div className="bg-[#0f172a] border-b border-gray-800 flex justify-center p-3">
+      <div className="bg-[#0f172a] border-b border-gray-800 flex justify-between items-center p-3">
+         <div className="w-10 md:w-20"></div>
+
          <div className="bg-black/20 p-1 rounded-lg shadow-inner border border-white/5 inline-flex">
             <button onClick={() => setMode('ft')} className={`px-6 py-1.5 text-xs font-bold rounded-md transition-all ${mode === 'ft' ? 'bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg shadow-cyan-900/50' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}>Jogo Completo (FT)</button>
             <button onClick={() => setMode('ht')} className={`px-6 py-1.5 text-xs font-bold rounded-md transition-all ${mode === 'ht' ? 'bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg shadow-cyan-900/50' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}>1º Tempo (HT)</button>
          </div>
+
+         <button onClick={handleSave} disabled={saved} className={`p-2 rounded-full transition-all mr-2 ${saved ? 'bg-green-500 text-white shadow-[0_0_15px_rgba(34,197,94,0.5)]' : 'bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white'}`} title="Salvar Palpite">
+            {saved ? <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg> : <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" /></svg>}
+         </button>
       </div>
 
       <div className="p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 bg-[#0b1219]">
@@ -276,11 +284,11 @@ function AnalysisDisplay({ homeTeam, awayTeam, homeCrest, awayCrest, lambdaHomeF
                <span className="w-2 h-2 bg-cyan-500 rounded-full mr-2"></span> Ajustes de Cenário
             </h3>
             <SliderInput label={`Must Win (${homeTeam})`} value={mustWinHome} setValue={setMustWinHome} min="0.6" max="1.5" />
-            <SliderInput label={`Desfalques (${homeTeam})`} value={desfalquesHome} setValue={setDesfalquesHome} min="0.5" max="1" />
+            <SliderInput label={`Desfalques (${homeTeam})`} value={setDesfalquesHome} setValue={setDesfalquesHome} min="0.5" max="1" />
             <SliderInput label="Força Mando" value={mando} setValue={setMando} min="0.8" max="1.5" />
             <div className="my-6 border-t border-gray-800"></div>
             <SliderInput label={`Must Win (${awayTeam})`} value={mustWinAway} setValue={setMustWinAway} min="0.6" max="1.5" />
-            <SliderInput label={`Desfalques (${awayTeam})`} value={desfalquesAway} setValue={setDesfalquesAway} min="0.5" max="1" />
+            <SliderInput label={`Desfalques (${awayTeam})`} value={setDesfalquesAway} min="0.5" max="1" />
           </div>
         </div>
 
@@ -299,9 +307,26 @@ function AnalysisDisplay({ homeTeam, awayTeam, homeCrest, awayCrest, lambdaHomeF
     </div>
   );
 }
-// --- Outros Componentes (Histórico, Salvos, Modal) (Adaptados) ---
 
-// --- Componente de Login Modal ---
+// --- Funções Auxiliares e Outros Componentes ---
+function SavedMatchDisplay({ match, onDelete }) {
+    const probs = calculateProbabilities(match.lambdaHome, match.lambdaAway);
+    const isFinished = match.status === 'FINISHED' || (match.finalScoreHome !== undefined);
+    const result = isFinished ? (match.finalScoreHome > match.finalScoreAway ? '1' : match.finalScoreAway > match.finalScoreHome ? '2' : 'X') : null;
+    const SimpleBox = ({ label, value, highlight }) => (<div className={`flex flex-col items-center p-2 rounded-lg border flex-1 transition-all ${highlight ? "bg-purple-500/20 text-purple-300 border-purple-500/50 ring-1 ring-purple-500" : "bg-slate-800/40 text-gray-500 border-gray-800"}`}><span className="text-[10px] font-bold mb-0.5 opacity-70">{label}</span><span className="text-lg font-extrabold">{value.toFixed(1)}%</span></div>);
+    return (
+      <div className="bg-[#16202a] shadow-lg rounded-2xl overflow-hidden border border-gray-800 mt-4 relative group">
+        <button onClick={() => onDelete(match.id)} className="absolute top-2 right-2 z-20 bg-red-500/10 text-red-500 p-1.5 rounded-full hover:bg-red-500 hover:text-white transition-all opacity-100 md:opacity-0 group-hover:opacity-100"><svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+        <div className={`${isFinished ? 'bg-slate-950' : 'bg-slate-900'} px-6 py-3 text-center border-b border-gray-800 transition-colors`}>
+          <span className={`text-[10px] font-bold uppercase tracking-widest block mb-1 ${isFinished ? 'text-gray-600' : 'text-cyan-600'}`}>{LEAGUE_NAMES[match.competition] || match.competition} {isFinished && "• FINALIZADO"}</span>
+          <div className="flex justify-center items-center space-x-2"><span className="text-lg font-bold text-gray-200">{match.homeTeam}</span>{isFinished ? <span className="bg-gray-800 text-white border border-gray-700 px-3 py-0.5 rounded font-black text-lg">{match.finalScoreHome}-{match.finalScoreAway}</span> : <span className="text-sm text-gray-600">vs</span>}<span className="text-lg font-bold text-gray-200">{match.awayTeam}</span></div>
+          <p className={`text-[10px] mt-1 ${isFinished ? 'text-gray-600' : 'text-gray-500'}`}>Salvo em: {new Date(match.savedAt.seconds * 1000).toLocaleDateString('pt-BR')}</p>
+        </div>
+        <div className="p-4 bg-[#0b1219]"><div className="grid grid-cols-4 gap-2"><SimpleBox label="1" value={probs.prob_1} highlight={result === '1'} /><SimpleBox label="X" value={probs.prob_X} highlight={result === 'X'} /><SimpleBox label="2" value={probs.prob_2} highlight={result === '2'} /><SimpleBox label="+2.5" value={probs.prob_over_2_5} highlight={isFinished && (match.finalScoreHome + match.finalScoreAway) > 2.5} /></div></div>
+      </div>
+    );
+}
+
 function LoginModal({ isOpen, onClose, onLoginSuccess }) {
   const [isRegistering, setIsRegistering] = useState(false);
   const [email, setEmail] = useState("");
@@ -315,17 +340,13 @@ function LoginModal({ isOpen, onClose, onLoginSuccess }) {
     setError("");
     try {
       if (isRegistering) {
-        // Usando createUserWithEmailAndPassword (Cadastrar)
         await createUserWithEmailAndPassword(auth, email, password);
       } else {
-        // Usando signInWithEmailAndPassword (Login)
         await signInWithEmailAndPassword(auth, email, password);
       }
       onLoginSuccess();
       onClose();
     } catch (err) {
-      setError(err.message.includes("auth/invalid-credential") ? "Email ou senha incorretos." : err.message);
-      // Aqui tratamos a mensagem de erro
       if (err.message.includes("auth/email-already-in-use")) {
           setError("O email fornecido já está em uso.");
       } else if (err.message.includes("auth/weak-password")) {
@@ -354,6 +375,7 @@ function LoginModal({ isOpen, onClose, onLoginSuccess }) {
   );
 }
 
+// --- App Principal ---
 function App() {
   const [allMatches, setAllMatches] = useState([]);
   const [allTeams, setAllTeams] = useState([]);
@@ -432,20 +454,41 @@ function App() {
   return (
     <div className="min-h-screen bg-[#0a1018] py-8 px-4 sm:px-6 lg:px-8 font-sans text-gray-300 relative">
       <LoginModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} onLoginSuccess={() => setIsLoginOpen(false)} />
+      
       <div className="max-w-6xl mx-auto pb-16">
-        <div className="flex justify-end mb-4">
-          {user ? <div className="flex items-center space-x-4 bg-[#16202a] px-4 py-2 rounded-full shadow-sm border border-gray-800"><span className="text-xs font-bold text-gray-300">{user.email.split('@')[0]}</span><button onClick={handleLogout} className="text-xs font-bold text-red-400 hover:text-red-300">Sair</button></div> : <button onClick={() => setIsLoginOpen(true)} className="bg-[#16202a] hover:bg-[#1c2936] text-cyan-400 border border-gray-700 font-bold py-2 px-6 rounded-full shadow-lg text-sm flex items-center transition-all"><span className="mr-2">🔐</span> Entrar</button>}
-        </div>
-        <div className="flex flex-col items-center mb-10"><img src={logoImg} alt="Logo ROI+" className="w-52 mb-6 rounded-2xl shadow-2xl shadow-cyan-900/20" /></div>
         
-        <div className="flex justify-center mb-10 overflow-x-auto">
-          <div className="bg-[#16202a] p-1.5 rounded-2xl shadow-lg border border-gray-800 inline-flex whitespace-nowrap">
-            <button onClick={() => setActiveTab('matches')} className={`px-6 py-2.5 text-xs font-bold rounded-xl transition-all ${activeTab === 'matches' ? 'bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg shadow-cyan-900/40' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}>📅 Próximos Jogos</button>
-            <button onClick={() => setActiveTab('simulator')} className={`px-6 py-2.5 text-xs font-bold rounded-xl transition-all ${activeTab === 'simulator' ? 'bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg shadow-cyan-900/40' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}>⚽ Simulador</button>
-            <button onClick={() => setActiveTab('history')} className={`px-6 py-2.5 text-xs font-bold rounded-xl transition-all ${activeTab === 'history' ? 'bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg shadow-cyan-900/40' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}>✅ Histórico</button>
-            {user && <button onClick={() => setActiveTab('saved')} className={`px-6 py-2.5 text-xs font-bold rounded-xl transition-all ${activeTab === 'saved' ? 'bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg shadow-cyan-900/40' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}>💾 Palpites</button>}
-          </div>
-        </div>
+        {/* NOVO HEADER: LOGO | MENU | LOGIN (ALINHAMENTO HORIZONTAL) */}
+        <header className="mb-10 pt-4">
+            <div className="flex flex-col md:flex-row justify-between items-center mb-6">
+                {/* 1. Logo (Left) */}
+                <div className="flex items-center flex-shrink-0 mb-4 md:mb-0">
+                    <img src={logoImg} alt="Logo ROI+" className="w-40 rounded-xl shadow-xl shadow-cyan-900/20" />
+                </div>
+
+                {/* 2. Menu/Tabs (Center, Crescimento) */}
+                <div className="flex-grow flex justify-center w-full md:w-auto overflow-x-auto md:mx-4">
+                    <div className="bg-[#16202a] p-1.5 rounded-2xl shadow-lg border border-gray-800 inline-flex whitespace-nowrap">
+                        <button onClick={() => setActiveTab('matches')} className={`px-6 py-2.5 text-xs font-bold rounded-xl transition-all ${activeTab === 'matches' ? 'bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg shadow-cyan-900/40' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}>📅 Próximos Jogos</button>
+                        <button onClick={() => setActiveTab('simulator')} className={`px-6 py-2.5 text-xs font-bold rounded-xl transition-all ${activeTab === 'simulator' ? 'bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg shadow-cyan-900/40' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}>⚽ Simulador</button>
+                        <button onClick={() => setActiveTab('history')} className={`px-6 py-2.5 text-xs font-bold rounded-xl transition-all ${activeTab === 'history' ? 'bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg shadow-cyan-900/40' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}>✅ Histórico</button>
+                        {user && <button onClick={() => setActiveTab('saved')} className={`px-6 py-2.5 text-xs font-bold rounded-xl transition-all ${activeTab === 'saved' ? 'bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg shadow-cyan-900/40' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}>💾 Palpites</button>}
+                    </div>
+                </div>
+
+                {/* 3. Login/User (Right, Fixo) */}
+                <div className="flex-shrink-0 mt-4 md:mt-0">
+                    {user ? (
+                       <div className="flex items-center space-x-4 bg-[#16202a] px-4 py-2 rounded-full shadow-sm border border-gray-800">
+                         <span className="text-xs font-bold text-gray-300">{user.email.split('@')[0]}</span>
+                         <button onClick={handleLogout} className="text-xs font-bold text-red-400 hover:text-red-300">Sair</button>
+                       </div>
+                    ) : (
+                        <button onClick={() => setIsLoginOpen(true)} className="bg-[#16202a] hover:bg-[#1c2936] text-cyan-400 border border-gray-700 font-bold py-2 px-6 rounded-full shadow-lg text-sm flex items-center transition-all"><span className="mr-2">🔐</span> Entrar</button>
+                    )}
+                </div>
+            </div>
+            
+        </header>
 
         {activeTab === 'matches' && (
           <>
@@ -476,7 +519,7 @@ function App() {
                 <div><label className="block text-xs font-bold text-gray-500 uppercase mb-2">Visitante</label><select value={simAwayTeamId} onChange={(e) => setSimAwayTeamId(e.target.value)} disabled={!simLeague} className="block w-full pl-3 pr-8 py-2.5 text-sm border-gray-700 bg-[#0a1018] text-gray-200 rounded-lg focus:ring-1 focus:ring-cyan-500 border disabled:opacity-50"><option value="">...</option>{teamsInSimLeague.filter(t => t.team_id !== parseInt(simHomeTeamId)).map(t => <option key={t.team_id} value={t.team_id}>{t.name}</option>)}</select></div>
               </div>
             </div>
-            {(simLambdaHomeFT > 0) ? <AnalysisDisplay homeTeam={simHomeTeamName} awayTeam={simAwayTeamName} homeCrest={simHomeCrest} awayCrest={simAwayCrest} lambdaHomeFT={simLambdaHomeFT} lambdaAwayFT={simLambdaAwayFT} lambdaHomeHT={simLambdaHomeHT} lambdaAwayHT={simLambdaAwayHT} competition={simLeague} date={null} user={user} /> : <div className="flex flex-col items-center justify-center py-24 text-gray-600 border border-dashed border-gray-800 rounded-3xl bg-[#16202a]/50"><p className="font-medium">Configure a simulação acima</p></div>}
+            {(simLambdaHomeFT > 0) ? <AnalysisDisplay homeTeam={simHomeTeamName} awayTeam={simAwayTeamName} homeCrest={simHomeCrest} awayCrest={simAwayCrest} lambdaHomeFT={simLambdaHomeFT} lambdaAwayFT={simLambdaAwayFT} lambdaHomeHT={simLambdaHomeHT} lambdaAwayHT={simLambdaAwayHT} competition={simLeague} date={null} matchDetails={{}} user={user} /> : <div className="flex flex-col items-center justify-center py-24 text-gray-600 border border-dashed border-gray-800 rounded-3xl bg-[#16202a]/50"><p className="font-medium">Configure a simulação acima</p></div>}
           </>
         )}
 
@@ -499,7 +542,7 @@ function App() {
         )}
       </div>
 
-      {/* Footer Dark */}
+      {/* Footer Dark (Mantido) */}
       <div className="mt-20 pt-8 border-t border-gray-800 flex flex-col md:flex-row justify-between items-center text-gray-600 text-xs max-w-6xl mx-auto px-4">
         <div className="mb-4 md:mb-0">&copy; {new Date().getFullYear()} ROI+ Analytics.</div>
         <a href="https://www.instagram.com/roistats" target="_blank" className="flex items-center space-x-2 hover:text-cyan-500 transition-colors group">
