@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { db, auth } from './firebaseConfig'; 
 import { collection, getDocs, query, orderBy, addDoc, deleteDoc, doc, where } from 'firebase/firestore';
+import BankrollManager from './BankrollManager';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
 import { factorial } from 'mathjs';
 import './App.css';
@@ -92,7 +93,7 @@ const OddBox = ({ label, probability }) => {
         <span className="text-sm font-bold text-gray-200">@{fairOdd.toFixed(2)}</span>
       </div>
       <div className="relative">
-        <input type="number" step="0.01" placeholder="Odd?" value={userOdd} onChange={(e) => setUserOdd(e.target.value)} className={`w-full text-center text-sm font-bold p-1.5 rounded border bg-slate-900/80 focus:outline-none focus:ring-1 transition-all ${hasValue ? 'text-green-400 border-green-500/50 focus:ring-green-500' : 'text-gray-300 border-gray-700 focus:ring-cyan-500'}`} />
+        <input type="number" step="0.01" placeholder="Odd?" value={userOdd} onChange={e => setUserOdd(e.target.value)} className={`w-full text-center text-sm font-bold p-1.5 rounded border bg-slate-900/80 focus:outline-none focus:ring-1 transition-all ${hasValue ? 'text-green-400 border-green-500/50 focus:ring-green-500' : 'text-gray-300 border-gray-700 focus:ring-cyan-500'}`} />
       </div>
       {userOdd && (
         <div className={`text-[10px] font-bold text-center mt-2 px-1 py-0.5 rounded ${hasValue ? 'text-green-300 bg-green-500/20' : 'text-red-300 bg-red-500/20'}`}>
@@ -160,7 +161,8 @@ function HistoryMatchDisplay({ match }) {
   );
 }
 
-function AnalysisDisplay({ homeTeam, awayTeam, homeCrest, awayCrest, lambdaHomeFT, lambdaAwayFT, lambdaHomeHT, lambdaAwayHT, competition, date, matchDetails, user }) {
+
+function AnalysisDisplay({ homeTeam, awayTeam, homeCrest, awayCrest, lambdaHomeFT, lambdaAwayFT, lambdaHomeHT, lambdaAwayHT, competition, date, matchDetails, user, homePosition, awayPosition }) {
   const [mustWinHome, setMustWinHome] = useState(1);
   const [mustWinAway, setMustWinAway] = useState(1);
   const [desfalquesHome, setDesfalquesHome] = useState(1);
@@ -205,12 +207,15 @@ function AnalysisDisplay({ homeTeam, awayTeam, homeCrest, awayCrest, lambdaHomeF
         </div>
 
         <div className="flex items-center justify-center space-x-8 relative z-10">
+            {/* Time Mandante */}
             <div className="flex flex-col items-center w-1/3 group">
                <div className="relative">
                   {homeCrest ? <img src={homeCrest} alt={homeTeam} className="h-20 w-20 object-contain mb-3 drop-shadow-2xl transform group-hover:scale-110 transition-transform duration-300" /> : <div className="h-20 w-20 bg-white/10 rounded-full mb-3 flex items-center justify-center text-3xl border border-white/10">⚽</div>}
                   <div className="absolute inset-0 bg-cyan-500 blur-2xl opacity-0 group-hover:opacity-20 transition-opacity duration-500 rounded-full"></div>
                </div>
                <h2 className="text-xl md:text-2xl font-bold leading-tight text-gray-100">{homeTeam}</h2>
+               {/* NOVO: Posição do Time */}
+               {homePosition && <span className="text-xs font-bold text-cyan-300 mt-1 bg-cyan-900/30 px-2 py-0.5 rounded-full border border-cyan-800/50">Posição: {homePosition}º</span>}
             </div>
 
             <div className="flex flex-col items-center">
@@ -250,12 +255,15 @@ function AnalysisDisplay({ homeTeam, awayTeam, homeCrest, awayCrest, lambdaHomeF
                )}
             </div>
 
+            {/* Time Visitante */}
             <div className="flex flex-col items-center w-1/3 group">
                <div className="relative">
                   {awayCrest ? <img src={awayCrest} alt={awayTeam} className="h-20 w-20 object-contain mb-3 drop-shadow-2xl transform group-hover:scale-110 transition-transform duration-300" /> : <div className="h-20 w-20 bg-white/10 rounded-full mb-3 flex items-center justify-center text-3xl border border-white/10">⚽</div>}
                   <div className="absolute inset-0 bg-purple-500 blur-2xl opacity-0 group-hover:opacity-20 transition-opacity duration-500 rounded-full"></div>
                </div>
                <h2 className="text-xl md:text-2xl font-bold leading-tight text-gray-100">{awayTeam}</h2>
+               {/* NOVO: Posição do Time */}
+               {awayPosition && <span className="text-xs font-bold text-cyan-300 mt-1 bg-cyan-900/30 px-2 py-0.5 rounded-full border border-cyan-800/50">Posição: {awayPosition}º</span>}
             </div>
         </div>
 
@@ -288,7 +296,7 @@ function AnalysisDisplay({ homeTeam, awayTeam, homeCrest, awayCrest, lambdaHomeF
             <SliderInput label="Força Mando" value={mando} setValue={setMando} min="0.8" max="1.5" />
             <div className="my-6 border-t border-gray-800"></div>
             <SliderInput label={`Must Win (${awayTeam})`} value={mustWinAway} setValue={setMustWinAway} min="0.6" max="1.5" />
-            <SliderInput label={`Desfalques (${awayTeam})`} value={setDesfalquesAway} min="0.5" max="1" />
+            <SliderInput label={`Desfalques (${awayTeam})`} value={setDesfalquesAway} setValue={setDesfalquesAway} min="0.5" max="1" />
           </div>
         </div>
 
@@ -309,6 +317,7 @@ function AnalysisDisplay({ homeTeam, awayTeam, homeCrest, awayCrest, lambdaHomeF
 }
 
 // --- Funções Auxiliares e Outros Componentes ---
+
 function SavedMatchDisplay({ match, onDelete }) {
     const probs = calculateProbabilities(match.lambdaHome, match.lambdaAway);
     const isFinished = match.status === 'FINISHED' || (match.finalScoreHome !== undefined);
@@ -375,6 +384,61 @@ function LoginModal({ isOpen, onClose, onLoginSuccess }) {
   );
 }
 
+// --- Tabela de Classificação (Modal) ---
+function StandingsTable({ standings, leagueName, isOpen, onClose, homeTeamId, awayTeamId }) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 backdrop-blur-sm p-4">
+      <div className="bg-[#16202a] border border-gray-700 rounded-2xl shadow-2xl p-8 w-full max-w-4xl relative animate-fade-in-up max-h-[90vh] overflow-y-auto">
+        <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-white">✕</button>
+        <h2 className="text-xl font-black text-white mb-6 border-b border-gray-800 pb-2">{leagueName} - Classificação Geral</h2>
+        
+        {standings.length === 0 ? (
+          <p className="text-gray-500">Classificação não disponível ou ainda não foi coletada.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm text-left text-gray-400">
+              <thead className="text-xs text-cyan-400 uppercase bg-gray-900/50 sticky top-0">
+                <tr>
+                  <th scope="col" className="px-3 py-2">Pos</th>
+                  <th scope="col" className="px-6 py-2">Time</th>
+                  <th scope="col" className="px-3 py-2 text-center">J</th>
+                  <th scope="col" className="px-3 py-2 text-center font-black text-white">Pts</th>
+                  <th scope="col" className="px-3 py-2 text-center">SG</th>
+                </tr>
+              </thead>
+              <tbody>
+                {standings.map((row, index) => {
+                  const isPlayingTeam = row.team_id === homeTeamId || row.team_id === awayTeamId;
+                  
+                  return (
+                    <tr 
+                      key={index} 
+                      className={`
+                        border-b border-gray-800 hover:bg-slate-800/50 transition-colors
+                        ${isPlayingTeam ? 'bg-cyan-900/30 font-bold text-white border-cyan-700/50 shadow-lg' : 'bg-[#16202a] text-gray-400'}
+                      `}
+                    >
+                      <td className={`px-3 py-3 font-medium ${isPlayingTeam ? 'text-white' : 'text-gray-300'}`}>{row.position}</td>
+                      <td className="px-6 py-3 flex items-center space-x-3">
+                        {row.crest && <img src={row.crest} alt={row.team_name} className="w-5 h-5 object-contain" />}
+                        <span className={`${isPlayingTeam ? 'text-white' : 'text-gray-300'}`}>{row.team_name}</span>
+                      </td>
+                      <td className="px-3 py-3 text-center">{row.played_games}</td>
+                      <td className="px-3 py-3 text-center font-black text-cyan-400">{row.points}</td>
+                      <td className="px-3 py-3 text-center text-gray-500">{row.goal_difference}</td>
+                    </tr>
+                  )})}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // --- App Principal ---
 function App() {
   const [allMatches, setAllMatches] = useState([]);
@@ -391,9 +455,26 @@ function App() {
   const [simAwayTeamId, setSimAwayTeamId] = useState("");
   const [user, setUser] = useState(null);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
+  
+  // Classificação e Modal
+  const [standings, setStandings] = useState([]);
+  const [showStandingsModal, setShowStandingsModal] = useState(false);
+  
+  // Função para buscar a classificação
+  const fetchStandings = async (leagueCode) => {
+      try {
+          const q = query(collection(db, "classificacao_geral"), where("competition_code", "==", leagueCode), orderBy("position", "asc"));
+          const snapshot = await getDocs(q);
+          setStandings(snapshot.docs.map(doc => doc.data()));
+      } catch (error) {
+          console.error("Erro ao buscar classificação:", error);
+          setStandings([]);
+      }
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => { setUser(currentUser); if (currentUser) fetchSavedMatches(currentUser.uid); else setSavedMatches([]); });
+    
     const fetchData = async () => {
       try {
         setLoading(true);
@@ -415,6 +496,15 @@ function App() {
     fetchData();
     return () => unsubscribe();
   }, []);
+  
+  // Recarrega a classificação quando a liga muda
+  useEffect(() => {
+      if (selectedLeagueMatch) {
+          fetchStandings(selectedLeagueMatch);
+      } else {
+          setStandings([]);
+      }
+  }, [selectedLeagueMatch]);
 
   const fetchSavedMatches = async (uid) => { try { const q = query(collection(db, "users_saved_matches"), where("userId", "==", uid)); const s = await getDocs(q); setSavedMatches(s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b)=>b.savedAt-a.savedAt)); } catch (e) {} };
   const handleDeleteSaved = async (id) => { if(confirm("Excluir?")) { await deleteDoc(doc(db, "users_saved_matches", id)); setSavedMatches(p => p.filter(m => m.id !== id)); } };
@@ -422,6 +512,18 @@ function App() {
   const uniqueLeaguesMatches = [...new Set(allMatches.map(m => m.competition_code || m.competition))].sort();
   const filteredMatches = selectedLeagueMatch ? allMatches.filter(m => (m.competition_code || m.competition) === selectedLeagueMatch) : [];
   const currentMatch = allMatches.find(m => m.id === selectedMatchId);
+  
+  // NOVO: Coletando IDs e Posições
+  const homeTeamData = allTeams.find(t => t.name === currentMatch?.homeTeam);
+  const awayTeamData = allTeams.find(t => t.name === currentMatch?.awayTeam);
+  
+  const homeTeamId = homeTeamData ? String(homeTeamData.team_id) : null;
+  const awayTeamId = awayTeamData ? String(awayTeamData.team_id) : null;
+
+  const homePosition = standings.find(s => s.team_id === homeTeamId)?.position;
+  const awayPosition = standings.find(s => s.team_id === awayTeamId)?.position;
+  // FIM NOVO
+
   const matchesByDate = filteredMatches.reduce((acc, match) => {
     const dateStr = new Date(match.utcDate).toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'numeric', day: 'numeric' });
     const formattedDate = dateStr.charAt(0).toUpperCase() + dateStr.slice(1);
@@ -455,9 +557,19 @@ function App() {
     <div className="min-h-screen bg-[#0a1018] py-8 px-4 sm:px-6 lg:px-8 font-sans text-gray-300 relative">
       <LoginModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} onLoginSuccess={() => setIsLoginOpen(false)} />
       
+      {/* NOVO: Passando IDs dos times para o destaque */}
+      <StandingsTable 
+        standings={standings} 
+        leagueName={LEAGUE_NAMES[selectedLeagueMatch] || "Classificação"}
+        isOpen={showStandingsModal} 
+        onClose={() => setShowStandingsModal(false)}
+        homeTeamId={homeTeamId}
+        awayTeamId={awayTeamId}
+      />
+      
       <div className="max-w-6xl mx-auto pb-16">
         
-        {/* NOVO HEADER: LOGO | MENU | LOGIN (ALINHAMENTO HORIZONTAL) */}
+        {/* HEADER: LOGO | MENU | LOGIN (MANTIDO) */}
         <header className="mb-10 pt-4">
             <div className="flex flex-col md:flex-row justify-between items-center mb-6">
                 {/* 1. Logo (Left) */}
@@ -471,7 +583,10 @@ function App() {
                         <button onClick={() => setActiveTab('matches')} className={`px-6 py-2.5 text-xs font-bold rounded-xl transition-all ${activeTab === 'matches' ? 'bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg shadow-cyan-900/40' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}>📅 Próximos Jogos</button>
                         <button onClick={() => setActiveTab('simulator')} className={`px-6 py-2.5 text-xs font-bold rounded-xl transition-all ${activeTab === 'simulator' ? 'bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg shadow-cyan-900/40' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}>⚽ Simulador</button>
                         <button onClick={() => setActiveTab('history')} className={`px-6 py-2.5 text-xs font-bold rounded-xl transition-all ${activeTab === 'history' ? 'bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg shadow-cyan-900/40' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}>✅ Histórico</button>
+                                               
                         {user && <button onClick={() => setActiveTab('saved')} className={`px-6 py-2.5 text-xs font-bold rounded-xl transition-all ${activeTab === 'saved' ? 'bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg shadow-cyan-900/40' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}>💾 Palpites</button>}
+
+                        <button onClick={() => setActiveTab('bankroll')} className={`px-6 py-2.5 text-xs font-bold rounded-xl transition-all ${activeTab === 'bankroll' ? 'bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg shadow-cyan-900/40' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}>📈 Gestão de Banca</button>
                     </div>
                 </div>
 
@@ -494,7 +609,19 @@ function App() {
           <>
             <div className="bg-[#16202a] p-6 rounded-2xl shadow-lg border border-gray-800 mb-8 max-w-4xl mx-auto">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div><label className="block text-xs font-bold text-gray-500 uppercase mb-2 tracking-wider">1. Campeonato</label><select value={selectedLeagueMatch} onChange={(e) => { setSelectedLeagueMatch(e.target.value); setSelectedMatchId(""); }} className="block w-full pl-4 pr-10 py-3 text-base border-gray-700 bg-[#0a1018] text-gray-200 focus:outline-none focus:ring-1 focus:ring-cyan-500 rounded-xl hover:border-gray-600 transition-colors cursor-pointer"><option value="">Selecione...</option>{uniqueLeaguesMatches.map(code => <option key={code} value={code}>{LEAGUE_NAMES[code] || code}</option>)}</select></div>
+                <div><label className="block text-xs font-bold text-gray-500 uppercase mb-2 tracking-wider">1. Campeonato</label>
+                   <div className="flex space-x-2 items-center">
+                     <select value={selectedLeagueMatch} onChange={(e) => { setSelectedLeagueMatch(e.target.value); setSelectedMatchId(""); }} className="block w-full pl-4 pr-10 py-3 text-base border-gray-700 bg-[#0a1018] text-gray-200 focus:outline-none focus:ring-1 focus:ring-cyan-500 rounded-xl hover:border-gray-600 transition-colors cursor-pointer">
+                        <option value="">Selecione...</option>
+                        {uniqueLeaguesMatches.map(code => <option key={code} value={code}>{LEAGUE_NAMES[code] || code}</option>)}
+                     </select>
+                     {selectedLeagueMatch && (
+                        <button onClick={() => setShowStandingsModal(true)} className="p-2 bg-cyan-600/10 text-cyan-400 rounded-lg hover:bg-cyan-600/20 transition-colors" title="Ver Classificação">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l4-2v13M9 19a3 3 0 003 3m-3-3h10a2 2 0 002-2V7a2 2 0 00-2-2H9a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                        </button>
+                     )}
+                   </div>
+                </div>
                 <div><label className="block text-xs font-bold text-gray-500 uppercase mb-2 tracking-wider">2. Partida</label><select value={selectedMatchId} onChange={(e) => setSelectedMatchId(e.target.value)} disabled={!selectedLeagueMatch} className="block w-full pl-4 pr-10 py-3 text-base border-gray-700 bg-[#0a1018] text-gray-200 focus:outline-none focus:ring-1 focus:ring-cyan-500 rounded-xl hover:border-gray-600 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"><option value="">{selectedLeagueMatch ? "Selecione..." : "..."}</option>{Object.keys(matchesByDate).map(d => <optgroup key={d} label={d} className="bg-slate-800 text-gray-400">{matchesByDate[d].map(m => <option key={m.id} value={m.id} className="text-white">{m.homeTeam} vs {m.awayTeam} ({new Date(m.utcDate).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})})</option>)}</optgroup>)}</select></div>
               </div>
             </div>
@@ -505,6 +632,10 @@ function App() {
               lambdaHomeHT={currentMatch.lambda_home_ht} lambdaAwayHT={currentMatch.lambda_away_ht}
               competition={currentMatch.competition_code} date={currentMatch.utcDate} 
               matchDetails={{matchday: currentMatch.matchday, status: currentMatch.status, venue: currentMatch.venue, referee: currentMatch.referee}} user={user} 
+              
+              // NOVO: Posições
+              homePosition={homePosition}
+              awayPosition={awayPosition}
             /> : <div className="flex flex-col items-center justify-center py-24 text-gray-600 border border-dashed border-gray-800 rounded-3xl bg-[#16202a]/50"><p className="font-medium">Selecione um jogo para analisar</p></div>}
           </>
         )}
@@ -515,7 +646,7 @@ function App() {
               <h3 className="text-sm font-bold text-gray-300 uppercase mb-4 flex items-center"><span className="bg-cyan-500/10 text-cyan-400 p-1.5 rounded mr-3">⚽</span> Simulação Personalizada</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div><label className="block text-xs font-bold text-gray-500 uppercase mb-2">Campeonato</label><select value={simLeague} onChange={(e) => { setSimLeague(e.target.value); setSimHomeTeamId(""); setSimAwayTeamId(""); }} className="block w-full pl-3 pr-8 py-2.5 text-sm border-gray-700 bg-[#0a1018] text-gray-200 rounded-lg focus:ring-1 focus:ring-cyan-500 border"><option value="">...</option>{uniqueLeaguesSim.map(l => <option key={l} value={l}>{LEAGUE_NAMES[l] || l}</option>)}</select></div>
-                <div><label className="block text-xs font-bold text-gray-500 uppercase mb-2">Mandante</label><select value={simHomeTeamId} onChange={(e) => setSimHomeTeamId(e.target.value)} disabled={!simLeague} className="block w-full pl-3 pr-8 py-2.5 text-sm border-gray-700 bg-[#0a1018] text-gray-200 rounded-lg focus:ring-1 focus:ring-cyan-500 border disabled:opacity-50"><option value="">...</option>{teamsInSimLeague.map(t => <option key={t.team_id} value={t.team_id}>{t.name}</option>)}</select></div>
+                <div><label className="block text-xs font-bold text-gray-500 uppercase mb-2">Mandante</label><select value={simHomeTeamId} onChange={(e) => setSimHomeTeamId(e.target.value)} disabled={!simLeague} className="block w-full pl-3 pr-8 py-2.5 text-sm border-gray-700 bg-[#0a1018] text-gray-200 rounded-lg focus:ring-1 focus:ring-cyan-500 border disabled:opacity-50"><option value="">...</option>{teamsInSimLeague.filter(t => t.team_id !== parseInt(simHomeTeamId)).map(t => <option key={t.team_id} value={t.team_id}>{t.name}</option>)}</select></div>
                 <div><label className="block text-xs font-bold text-gray-500 uppercase mb-2">Visitante</label><select value={simAwayTeamId} onChange={(e) => setSimAwayTeamId(e.target.value)} disabled={!simLeague} className="block w-full pl-3 pr-8 py-2.5 text-sm border-gray-700 bg-[#0a1018] text-gray-200 rounded-lg focus:ring-1 focus:ring-cyan-500 border disabled:opacity-50"><option value="">...</option>{teamsInSimLeague.filter(t => t.team_id !== parseInt(simHomeTeamId)).map(t => <option key={t.team_id} value={t.team_id}>{t.name}</option>)}</select></div>
               </div>
             </div>
@@ -540,6 +671,10 @@ function App() {
             {savedMatches.length > 0 ? savedMatches.map(match => <SavedMatchDisplay key={match.id} match={match} onDelete={handleDeleteSaved} />) : <div className="flex flex-col items-center justify-center py-24 text-gray-600 border border-dashed border-gray-800 rounded-3xl bg-[#16202a]/50"><p className="font-medium">Você ainda não salvou nenhum palpite.</p></div>}
           </div>
         )}
+        
+        {/* NOVO: Aba Gestão de Banca */}
+        {activeTab === 'bankroll' && <BankrollManager />}
+
       </div>
 
       {/* Footer Dark (Mantido) */}
