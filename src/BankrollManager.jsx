@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { db } from './firebaseConfig'; // Importa a conexão com o banco
+import { db } from './firebaseConfig';
 import { 
     collection, 
     addDoc, 
@@ -45,7 +45,6 @@ const CSV_EXAMPLE_ROW = [
     new Date().getFullYear(), 1, 1000.00, 0.00, 50.00, 100.00, 50, "Banca Principal"
 ];
 
-// Calcula as métricas financeiras
 const calculateMetrics = (inputs) => {
     const { month, inicio, externo, aposta, investimento, divisao } = inputs;
     const safeInicio = safeNumber(inicio);
@@ -109,8 +108,6 @@ export default function BankrollManager({ user }) {
     const [selectedBanca, setSelectedBanca] = useState('Todas as Bancas');
     const [editingRecordId, setEditingRecordId] = useState(null);
     const [loading, setLoading] = useState(false);
-
-    // Estado principal dos dados (Agora vindo do Firebase)
     const [historicalData, setHistoricalData] = useState({});
 
     const [newMonthInputs, setNewMonthInputs] = useState({
@@ -123,7 +120,6 @@ export default function BankrollManager({ user }) {
         divisao: 50,
     });
 
-    // --- FIREBASE: Sincronização em Tempo Real ---
     useEffect(() => {
         if (!user) {
             setHistoricalData({});
@@ -131,26 +127,21 @@ export default function BankrollManager({ user }) {
         }
 
         setLoading(true);
-        // Cria a query para buscar apenas os registros DO USUÁRIO LOGADO
         const q = query(
             collection(db, "bankroll_records"),
             where("userId", "==", user.uid)
         );
 
-        // onSnapshot "escuta" o banco. Se mudar algo lá, atualiza aqui na hora.
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const dataByYear = {};
-            
             snapshot.forEach((doc) => {
                 const data = doc.data();
-                const record = { id: doc.id, ...data }; // Inclui o ID do documento
+                const record = { id: doc.id, ...data };
                 const year = String(record.year);
-
                 if (!dataByYear[year]) dataByYear[year] = [];
                 dataByYear[year].push(record);
             });
 
-            // Ordena os meses dentro de cada ano
             Object.keys(dataByYear).forEach(year => {
                 dataByYear[year].sort((a, b) => a.month - b.month);
             });
@@ -162,7 +153,6 @@ export default function BankrollManager({ user }) {
             setLoading(false);
         });
 
-        // Limpa o listener quando o componente desmonta
         return () => unsubscribe();
     }, [user]);
 
@@ -172,7 +162,6 @@ export default function BankrollManager({ user }) {
         setNewMonthInputs(prev => ({ ...prev, [name]: newValue }));
     };
     
-    // --- FIREBASE: Salvar ou Atualizar Registro ---
     const handleSaveMonth = async () => {
         if (!user) {
             alert("Você precisa estar logado para salvar dados.");
@@ -186,14 +175,13 @@ export default function BankrollManager({ user }) {
         const year = selectedYear;
         const monthIndex = parseInt(newMonthInputs.month);
         
-        // Calcula as métricas antes de enviar
         const metrics = calculateMetrics({ 
             ...newMonthInputs, 
             month: monthIndex 
         });
 
         const recordData = {
-            userId: user.uid, // VÍNCULO COM O USUÁRIO
+            userId: user.uid,
             year: parseInt(year),
             month: monthIndex,
             ...metrics,
@@ -202,12 +190,10 @@ export default function BankrollManager({ user }) {
 
         try {
             if (editingRecordId) {
-                // Atualizar documento existente
                 const docRef = doc(db, "bankroll_records", editingRecordId);
                 await updateDoc(docRef, recordData);
                 alert("Registro atualizado com sucesso!");
             } else {
-                // Criar novo documento
                 await addDoc(collection(db, "bankroll_records"), {
                     ...recordData,
                     createdAt: new Date()
@@ -221,33 +207,30 @@ export default function BankrollManager({ user }) {
         }
     };
 
-    // --- FIREBASE: Deletar Registro (Resetar Ano) ---
     const handleResetHistory = async () => {
         if (!user) return;
         
         if (confirm("ATENÇÃO: Isso apagará TODOS os seus registros de banca na nuvem. Essa ação não pode ser desfeita. Tem certeza?")) {
             try {
-                // Busca todos os registros do usuário para deletar um por um (Firestore não tem "delete collection" direto no cliente web de forma simples)
-                const q = query(collection(db, "bankroll_records"), where("userId", "==", user.uid));
-                
-                // Nota: Para muitos registros, o ideal é usar Cloud Functions, mas aqui usaremos batch para até 500 ops
-                const batch = writeBatch(db);
-                // Como não podemos ler query sem snapshot aqui, vamos usar o historicalData local que já está sincronizado
+                // Para deletar muitos registros, precisamos fazer em lotes
                 const allIds = Object.values(historicalData).flat().map(r => r.id);
-                
                 if (allIds.length === 0) {
                     alert("Não há registros para apagar.");
                     return;
                 }
 
-                // Deleta em lotes (Firestore permite batches de 500)
-                // Implementação simplificada: deleta os visíveis
-                allIds.forEach(id => {
-                    const ref = doc(db, "bankroll_records", id);
-                    batch.delete(ref);
-                });
+                // Divide em lotes de 400 para deletar
+                const chunkSize = 400;
+                for (let i = 0; i < allIds.length; i += chunkSize) {
+                    const chunk = allIds.slice(i, i + chunkSize);
+                    const batch = writeBatch(db);
+                    chunk.forEach(id => {
+                        const ref = doc(db, "bankroll_records", id);
+                        batch.delete(ref);
+                    });
+                    await batch.commit();
+                }
 
-                await batch.commit();
                 alert("Histórico limpo com sucesso!");
                 setHistoricalData({});
                 setSelectedBanca('Todas as Bancas');
@@ -280,7 +263,7 @@ export default function BankrollManager({ user }) {
             divisao: record.divisao,
         });
         
-        setEditingRecordId(record.id); // ID do Firestore
+        setEditingRecordId(record.id); 
         document.getElementById('manual-form').scrollIntoView({ behavior: 'smooth' });
     };
 
@@ -297,7 +280,7 @@ export default function BankrollManager({ user }) {
         });
     }
     
-    // --- FIREBASE: Importação de CSV em Lote ---
+    // --- IMPORTAÇÃO DE CSV CORRIGIDA (EM LOTES) ---
     const handleImportCSV = (e) => {
         const file = e.target.files[0];
         if (!file || !user) {
@@ -313,9 +296,8 @@ export default function BankrollManager({ user }) {
             const isRegexSplit = SEPARATOR instanceof RegExp;
             const dataLines = lines.slice(1); 
             
-            let importedCount = 0;
-            const batch = writeBatch(db); // Prepara um lote de gravações
-
+            // 1. Processar todos os dados primeiro
+            const recordsToSave = [];
             dataLines.forEach((line) => {
                 let parts;
                 if (isRegexSplit) {
@@ -328,12 +310,6 @@ export default function BankrollManager({ user }) {
                 
                 const monthString = parts[1]?.trim().toUpperCase();
                 const monthNumber = MONTH_ABBREVIATIONS[monthString] || safeNumber(parts[1]); 
-                // Ajuste de índice (CSV geralmente é 1-12, sistema usa 0-11)
-                // Se o usuário mandar 1 (Jan), o sistema espera 0.
-                // Mas minha lógica de calculateMetrics espera "month" como número.
-                // Vou padronizar: Salvar no banco como 0-11 (Jan=0).
-                // Se o CSV vier 1, subtrai 1.
-                
                 let monthIndex = monthNumber;
                 if (monthNumber >= 1 && monthNumber <= 12) monthIndex = monthNumber - 1;
 
@@ -350,29 +326,42 @@ export default function BankrollManager({ user }) {
 
                 const metrics = calculateMetrics(rawRecord);
                 
-                const docRef = doc(collection(db, "bankroll_records")); // Gera novo ID
-                batch.set(docRef, {
+                recordsToSave.push({
                     userId: user.uid,
                     ...metrics,
-                    year: parseInt(rawRecord.year), // Garante formato numérico
+                    year: parseInt(rawRecord.year),
                     createdAt: new Date()
                 });
-                
-                importedCount++;
             });
 
+            // 2. Enviar em lotes de 450 (limite seguro do Firebase é 500)
+            const CHUNK_SIZE = 450;
+            let importedCount = 0;
+
             try {
-                await batch.commit();
-                alert(`${importedCount} registros importados e sincronizados com a nuvem!`);
+                for (let i = 0; i < recordsToSave.length; i += CHUNK_SIZE) {
+                    const chunk = recordsToSave.slice(i, i + CHUNK_SIZE);
+                    const batch = writeBatch(db);
+
+                    chunk.forEach(record => {
+                        const docRef = doc(collection(db, "bankroll_records"));
+                        batch.set(docRef, record);
+                    });
+
+                    await batch.commit();
+                    importedCount += chunk.length;
+                    console.log(`Lote importado: ${importedCount} registros...`);
+                }
+
+                alert(`${importedCount} registros importados com sucesso!`);
                 
-                // Atualiza a view para o ano mais recente importado
                 const allYears = Object.keys(historicalData).sort().reverse();
                 if (allYears.length > 0 && selectedYear !== 'Total Geral') {
                     setSelectedYear(allYears[0]);
                 }
             } catch (error) {
                 console.error("Erro na importação em lote:", error);
-                alert("Erro ao importar dados. Tente importar menos linhas por vez.");
+                alert("Erro ao enviar dados para a nuvem. Verifique o console para detalhes.");
             }
         };
         reader.readAsText(file);
@@ -399,7 +388,6 @@ export default function BankrollManager({ user }) {
         return names.sort();
     }, [historicalData]);
     
-    // --- LÓGICA DE DADOS DA TABELA (Mantida a mesma lógica robusta anterior) ---
     const filteredData = useMemo(() => {
         if (selectedYear === 'Total Geral') {
             const availableYears = Object.keys(historicalData).sort();
@@ -565,7 +553,6 @@ export default function BankrollManager({ user }) {
         return { ...totals, annualVariacaoLiquida };
     }, [filteredData, selectedBanca, historicalData, selectedYear]);
 
-    // --- RENDERIZAÇÃO ---
     if (!user) {
         return (
             <div className="flex flex-col items-center justify-center py-20 text-gray-400 bg-[#16202a] rounded-2xl border border-gray-800 shadow-xl max-w-4xl mx-auto mt-8">
@@ -573,17 +560,15 @@ export default function BankrollManager({ user }) {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
                 <h3 className="text-xl font-bold text-gray-200 mb-2">Acesso Restrito</h3>
-                <p className="text-sm">Faça login para gerenciar sua banca na nuvem e sincronizar entre dispositivos.</p>
+                <p className="text-sm">Faça login para gerenciar sua banca na nuvem.</p>
             </div>
         );
     }
 
     return (
         <div className="max-w-7xl mx-auto pb-16 pt-6 px-4">
-            {/* Header de Carregamento */}
-            {loading && <div className="text-xs text-center text-cyan-500 mb-2 animate-pulse">Sincronizando dados da nuvem...</div>}
+            {loading && <div className="text-xs text-center text-cyan-500 mb-2 animate-pulse">Sincronizando dados...</div>}
 
-            {/* SEÇÃO DE FILTROS E TÍTULO */}
             <div className="flex flex-col md:flex-row justify-between items-center mb-6 bg-[#16202a] p-4 rounded-2xl border border-gray-800 shadow-md">
                 <h2 className="text-xl font-bold text-gray-100 mb-4 md:mb-0">
                     <span className="bg-cyan-500/10 text-cyan-400 p-2 rounded mr-3">📊</span> 
@@ -606,7 +591,6 @@ export default function BankrollManager({ user }) {
                 </div>
             </div>
 
-            {/* TABELA */}
             <div className="bg-[#16202a] p-4 rounded-2xl border border-gray-800 mb-8 shadow-xl overflow-hidden">
                 {filteredData.length === 0 ? (
                     <p className="text-gray-500 text-center py-10">Nenhum registro encontrado para {selectedYear}.</p>
@@ -655,7 +639,6 @@ export default function BankrollManager({ user }) {
                                         </td>
                                     </tr>
                                 ))}
-                                {/* Footer Totais */}
                                 <tr className="bg-cyan-900/40 border-t-2 border-cyan-500/80 font-black">
                                      <td className="px-2 py-3 text-white uppercase tracking-wider" colSpan="2">Total {selectedYear === 'Total Geral' ? 'Geral' : selectedYear}</td>
                                      <td className="px-2 py-3 text-center whitespace-nowrap text-cyan-300">{formatValue(annualTotals.inicio)}</td>
@@ -676,7 +659,6 @@ export default function BankrollManager({ user }) {
                 )}
             </div>
 
-            {/* FORMULÁRIO DE ENTRADA MANUAL */}
             {selectedYear !== 'Total Geral' ? (
                 <div id="manual-form" className="bg-[#16202a] p-6 rounded-2xl shadow-lg border border-gray-800 mb-8 border-l-4 border-l-cyan-600">
                     <h3 className="text-sm font-bold text-gray-300 uppercase mb-4 flex items-center">
@@ -707,7 +689,6 @@ export default function BankrollManager({ user }) {
                 </div>
             )}
 
-            {/* IMPORTAÇÃO */}
             <div className="bg-[#16202a] p-6 rounded-2xl shadow-lg border border-gray-800 mb-8 border-l-4 border-l-orange-500">
                 <h3 className="text-sm font-bold text-gray-300 uppercase mb-4 flex items-center"><span className="bg-orange-500/10 text-orange-400 p-1.5 rounded mr-3">📥</span> Importar Histórico</h3>
                 <div className="flex justify-between items-center mb-4">
