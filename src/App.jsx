@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { db, auth } from './firebaseConfig'; 
 import { collection, getDocs, query, orderBy, addDoc, deleteDoc, doc, where } from 'firebase/firestore';
+import BankrollManager from './BankrollManager';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
 import { factorial } from 'mathjs';
 import './App.css';
@@ -290,23 +291,12 @@ function AnalysisDisplay({ homeTeam, awayTeam, homeCrest, awayCrest, lambdaHomeF
             <h3 className="text-[10px] font-black text-gray-500 uppercase mb-5 border-b border-gray-800 pb-2 tracking-wider flex items-center">
                <span className="w-2 h-2 bg-cyan-500 rounded-full mr-2"></span> Ajustes de Cenário
             </h3>
-            
-            {/* CORRIGIDO: Must Win Home */}
             <SliderInput label={`Must Win (${homeTeam})`} value={mustWinHome} setValue={setMustWinHome} min="0.6" max="1.5" />
-            
-            {/* CORRIGIDO: Desfalques Home */}
-            <SliderInput label={`Desfalques (${homeTeam})`} value={desfalquesHome} setValue={setDesfalquesHome} min="0.5" max="1" />
-            
-            {/* CORRIGIDO: Força Mando */}
+            <SliderInput label={`Desfalques (${homeTeam})`} value={setDesfalquesHome} setValue={setDesfalquesHome} min="0.5" max="1" />
             <SliderInput label="Força Mando" value={mando} setValue={setMando} min="0.8" max="1.5" />
-            
             <div className="my-6 border-t border-gray-800"></div>
-            
-            {/* CORRIGIDO: Must Win Away */}
             <SliderInput label={`Must Win (${awayTeam})`} value={mustWinAway} setValue={setMustWinAway} min="0.6" max="1.5" />
-            
-            {/* CORRIGIDO: Desfalques Away */}
-            <SliderInput label={`Desfalques (${awayTeam})`} value={desfalquesAway} setValue={setDesfalquesAway} min="0.5" max="1" />
+            <SliderInput label={`Desfalques (${awayTeam})`} value={setDesfalquesAway} setValue={setDesfalquesAway} min="0.5" max="1" />
           </div>
         </div>
 
@@ -593,7 +583,10 @@ function App() {
                         <button onClick={() => setActiveTab('matches')} className={`px-6 py-2.5 text-xs font-bold rounded-xl transition-all ${activeTab === 'matches' ? 'bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg shadow-cyan-900/40' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}>📅 Próximos Jogos</button>
                         <button onClick={() => setActiveTab('simulator')} className={`px-6 py-2.5 text-xs font-bold rounded-xl transition-all ${activeTab === 'simulator' ? 'bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg shadow-cyan-900/40' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}>⚽ Simulador</button>
                         <button onClick={() => setActiveTab('history')} className={`px-6 py-2.5 text-xs font-bold rounded-xl transition-all ${activeTab === 'history' ? 'bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg shadow-cyan-900/40' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}>✅ Histórico</button>
+                                               
                         {user && <button onClick={() => setActiveTab('saved')} className={`px-6 py-2.5 text-xs font-bold rounded-xl transition-all ${activeTab === 'saved' ? 'bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg shadow-cyan-900/40' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}>💾 Palpites</button>}
+
+                        <button onClick={() => setActiveTab('bankroll')} className={`px-6 py-2.5 text-xs font-bold rounded-xl transition-all ${activeTab === 'bankroll' ? 'bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg shadow-cyan-900/40' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}>📈 Gestão de Banca</button>
                     </div>
                 </div>
 
@@ -678,6 +671,10 @@ function App() {
             {savedMatches.length > 0 ? savedMatches.map(match => <SavedMatchDisplay key={match.id} match={match} onDelete={handleDeleteSaved} />) : <div className="flex flex-col items-center justify-center py-24 text-gray-600 border border-dashed border-gray-800 rounded-3xl bg-[#16202a]/50"><p className="font-medium">Você ainda não salvou nenhum palpite.</p></div>}
           </div>
         )}
+        
+        {/* NOVO: Aba Gestão de Banca */}
+        {activeTab === 'bankroll' && <BankrollManager />}
+
       </div>
 
       {/* Footer Dark (Mantido) */}
