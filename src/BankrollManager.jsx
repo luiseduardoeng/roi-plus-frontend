@@ -1,8 +1,21 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { db } from './firebaseConfig'; // Importa a conexão com o banco
+import { 
+    collection, 
+    addDoc, 
+    updateDoc, 
+    deleteDoc, 
+    doc, 
+    query, 
+    where, 
+    onSnapshot,
+    writeBatch
+} from 'firebase/firestore';
 
 // --- Funções Auxiliares ---
 
 const safeNumber = (value) => {
+    if (typeof value === 'number') return value;
     const cleanValue = String(value).replace(',', '.');
     const num = parseFloat(cleanValue);
     return isNaN(num) ? 0 : num;
@@ -32,13 +45,14 @@ const CSV_EXAMPLE_ROW = [
     new Date().getFullYear(), 1, 1000.00, 0.00, 50.00, 100.00, 50, "Banca Principal"
 ];
 
+// Calcula as métricas financeiras
 const calculateMetrics = (inputs) => {
     const { month, inicio, externo, aposta, investimento, divisao } = inputs;
     const safeInicio = safeNumber(inicio);
     const safeDivisao = safeNumber(divisao);
     
     const initialInputs = {
-        month: month,
+        month: Number(month),
         inicio: safeInicio,
         externo: safeNumber(externo),
         aposta: safeNumber(aposta),
@@ -83,7 +97,7 @@ const InputField = ({ label, value, onChange, type = "number", min = "0", name }
     </div>
 );
 
-export default function BankrollManager() {
+export default function BankrollManager({ user }) {
     const currentYear = new Date().getFullYear().toString();
     
     const yearsOptions = useMemo(() => {
@@ -94,6 +108,10 @@ export default function BankrollManager() {
     const [selectedYear, setSelectedYear] = useState(currentYear);
     const [selectedBanca, setSelectedBanca] = useState('Todas as Bancas');
     const [editingRecordId, setEditingRecordId] = useState(null);
+    const [loading, setLoading] = useState(false);
+
+    // Estado principal dos dados (Agora vindo do Firebase)
+    const [historicalData, setHistoricalData] = useState({});
 
     const [newMonthInputs, setNewMonthInputs] = useState({
         bancaName: 'Banca Principal',
@@ -105,10 +123,48 @@ export default function BankrollManager() {
         divisao: 50,
     });
 
-    const [historicalData, setHistoricalData] = useState(() => {
-        const savedData = localStorage.getItem('bankrollHistory');
-        return savedData ? JSON.parse(savedData) : {};
-    });
+    // --- FIREBASE: Sincronização em Tempo Real ---
+    useEffect(() => {
+        if (!user) {
+            setHistoricalData({});
+            return;
+        }
+
+        setLoading(true);
+        // Cria a query para buscar apenas os registros DO USUÁRIO LOGADO
+        const q = query(
+            collection(db, "bankroll_records"),
+            where("userId", "==", user.uid)
+        );
+
+        // onSnapshot "escuta" o banco. Se mudar algo lá, atualiza aqui na hora.
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const dataByYear = {};
+            
+            snapshot.forEach((doc) => {
+                const data = doc.data();
+                const record = { id: doc.id, ...data }; // Inclui o ID do documento
+                const year = String(record.year);
+
+                if (!dataByYear[year]) dataByYear[year] = [];
+                dataByYear[year].push(record);
+            });
+
+            // Ordena os meses dentro de cada ano
+            Object.keys(dataByYear).forEach(year => {
+                dataByYear[year].sort((a, b) => a.month - b.month);
+            });
+
+            setHistoricalData(dataByYear);
+            setLoading(false);
+        }, (error) => {
+            console.error("Erro ao sincronizar dados:", error);
+            setLoading(false);
+        });
+
+        // Limpa o listener quando o componente desmonta
+        return () => unsubscribe();
+    }, [user]);
 
     const handleInputChange = (e) => {
         const { name, value, type } = e.target;
@@ -116,52 +172,107 @@ export default function BankrollManager() {
         setNewMonthInputs(prev => ({ ...prev, [name]: newValue }));
     };
     
-    const saveSingleRecord = (record, history) => {
-        const year = record.year.toString();
-        const monthIndex = record.month - 1; 
+    // --- FIREBASE: Salvar ou Atualizar Registro ---
+    const handleSaveMonth = async () => {
+        if (!user) {
+            alert("Você precisa estar logado para salvar dados.");
+            return;
+        }
+        if (selectedYear === 'Total Geral') {
+            alert("Selecione um ano específico para salvar registros.");
+            return;
+        }
+
+        const year = selectedYear;
+        const monthIndex = parseInt(newMonthInputs.month);
         
-        if (isNaN(monthIndex) || monthIndex < 0 || monthIndex > 11) return history; 
+        // Calcula as métricas antes de enviar
+        const metrics = calculateMetrics({ 
+            ...newMonthInputs, 
+            month: monthIndex 
+        });
 
-        const calculatedMetrics = calculateMetrics({ ...record, month: monthIndex });
-
-        const newRecord = {
-            ...calculatedMetrics,
-            year: year,
+        const recordData = {
+            userId: user.uid, // VÍNCULO COM O USUÁRIO
+            year: parseInt(year),
             month: monthIndex,
-            id: record.id || `${year}-${monthIndex}-${calculatedMetrics.bancaName}`,
+            ...metrics,
+            updatedAt: new Date()
         };
 
-        if (!history[year]) history[year] = [];
-
-        const recordIndex = history[year].findIndex(r => 
-            (r.month === newRecord.month && r.bancaName === newRecord.bancaName) || r.id === newRecord.id
-        );
-        
-        if (recordIndex !== -1) {
-            history[year][recordIndex] = newRecord;
-        } else {
-            history[year].push(newRecord);
+        try {
+            if (editingRecordId) {
+                // Atualizar documento existente
+                const docRef = doc(db, "bankroll_records", editingRecordId);
+                await updateDoc(docRef, recordData);
+                alert("Registro atualizado com sucesso!");
+            } else {
+                // Criar novo documento
+                await addDoc(collection(db, "bankroll_records"), {
+                    ...recordData,
+                    createdAt: new Date()
+                });
+                alert("Registro salvo com sucesso!");
+            }
+            handleCancelEdit();
+        } catch (error) {
+            console.error("Erro ao salvar:", error);
+            alert("Erro ao salvar no banco de dados.");
         }
+    };
+
+    // --- FIREBASE: Deletar Registro (Resetar Ano) ---
+    const handleResetHistory = async () => {
+        if (!user) return;
         
-        return history;
-    }
+        if (confirm("ATENÇÃO: Isso apagará TODOS os seus registros de banca na nuvem. Essa ação não pode ser desfeita. Tem certeza?")) {
+            try {
+                // Busca todos os registros do usuário para deletar um por um (Firestore não tem "delete collection" direto no cliente web de forma simples)
+                const q = query(collection(db, "bankroll_records"), where("userId", "==", user.uid));
+                
+                // Nota: Para muitos registros, o ideal é usar Cloud Functions, mas aqui usaremos batch para até 500 ops
+                const batch = writeBatch(db);
+                // Como não podemos ler query sem snapshot aqui, vamos usar o historicalData local que já está sincronizado
+                const allIds = Object.values(historicalData).flat().map(r => r.id);
+                
+                if (allIds.length === 0) {
+                    alert("Não há registros para apagar.");
+                    return;
+                }
+
+                // Deleta em lotes (Firestore permite batches de 500)
+                // Implementação simplificada: deleta os visíveis
+                allIds.forEach(id => {
+                    const ref = doc(db, "bankroll_records", id);
+                    batch.delete(ref);
+                });
+
+                await batch.commit();
+                alert("Histórico limpo com sucesso!");
+                setHistoricalData({});
+                setSelectedBanca('Todas as Bancas');
+                handleCancelEdit();
+
+            } catch (error) {
+                console.error("Erro ao resetar:", error);
+                alert("Erro ao limpar histórico.");
+            }
+        }
+    };
 
     const handleEditRecord = (record) => {
         if (selectedYear === 'Total Geral') {
             alert("Não é possível editar registros na visualização de Total Geral.");
             return;
         }
-
         if (selectedBanca === 'Todas as Bancas') {
              alert("A edição só está disponível ao filtrar por uma única banca.");
              return;
         }
         
-        const monthString = record.month.toString(); 
-        
         setNewMonthInputs({
             bancaName: record.bancaName,
-            month: monthString,
+            month: record.month.toString(),
             inicio: record.inicio,
             externo: record.externo,
             aposta: record.aposta,
@@ -169,7 +280,7 @@ export default function BankrollManager() {
             divisao: record.divisao,
         });
         
-        setEditingRecordId(record.id);
+        setEditingRecordId(record.id); // ID do Firestore
         document.getElementById('manual-form').scrollIntoView({ behavior: 'smooth' });
     };
 
@@ -185,44 +296,88 @@ export default function BankrollManager() {
             divisao: 50,
         });
     }
-
-    const handleResetHistory = () => {
-        if (confirm("ATENÇÃO: Isso apagará TODOS os registros. Tem certeza?")) {
-            localStorage.removeItem('bankrollHistory');
-            setHistoricalData({});
-            setSelectedBanca('Todas as Bancas');
-            handleCancelEdit();
-            alert("Histórico limpo!");
-        }
-    };
     
-    const handleSaveMonth = () => {
-        if (selectedYear === 'Total Geral') {
-            alert("Selecione um ano específico para salvar registros.");
+    // --- FIREBASE: Importação de CSV em Lote ---
+    const handleImportCSV = (e) => {
+        const file = e.target.files[0];
+        if (!file || !user) {
+            if(!user) alert("Faça login para importar.");
             return;
         }
 
-        const year = selectedYear;
-        const monthIndex = newMonthInputs.month;
-        let updatedHistory = { ...historicalData };
-        
-        const recordToSave = {
-            ...newMonthInputs,
-            year: year,
-            month: parseInt(monthIndex) + 1,
-            id: editingRecordId,
-        };
-        
-        updatedHistory = saveSingleRecord(recordToSave, updatedHistory);
-        const yearRecords = updatedHistory[year];
-        if (yearRecords) yearRecords.sort((a, b) => a.month - b.month);
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            const csvText = event.target.result;
+            const lines = csvText.trim().split('\n');
+            let SEPARATOR = lines[0].includes(';') ? ';' : lines[0].includes(',') ? ',' : /\s{2,}/;
+            const isRegexSplit = SEPARATOR instanceof RegExp;
+            const dataLines = lines.slice(1); 
+            
+            let importedCount = 0;
+            const batch = writeBatch(db); // Prepara um lote de gravações
 
-        localStorage.setItem('bankrollHistory', JSON.stringify(updatedHistory));
-        setHistoricalData(updatedHistory);
-        handleCancelEdit();
-        alert("Registro salvo com sucesso!");
+            dataLines.forEach((line) => {
+                let parts;
+                if (isRegexSplit) {
+                    parts = line.split(/\s+/).filter(p => p.length > 0);
+                } else {
+                    parts = line.split(SEPARATOR);
+                }
+                
+                if (parts.length < 8 || parts.every(p => p.trim() === '')) return; 
+                
+                const monthString = parts[1]?.trim().toUpperCase();
+                const monthNumber = MONTH_ABBREVIATIONS[monthString] || safeNumber(parts[1]); 
+                // Ajuste de índice (CSV geralmente é 1-12, sistema usa 0-11)
+                // Se o usuário mandar 1 (Jan), o sistema espera 0.
+                // Mas minha lógica de calculateMetrics espera "month" como número.
+                // Vou padronizar: Salvar no banco como 0-11 (Jan=0).
+                // Se o CSV vier 1, subtrai 1.
+                
+                let monthIndex = monthNumber;
+                if (monthNumber >= 1 && monthNumber <= 12) monthIndex = monthNumber - 1;
+
+                const rawRecord = {
+                    year: safeNumber(parts[0]),       
+                    month: monthIndex, 
+                    inicio: safeNumber(parts[2]),     
+                    externo: safeNumber(parts[3]),    
+                    aposta: safeNumber(parts[4]),     
+                    investimento: safeNumber(parts[5]), 
+                    divisao: safeNumber(parts[6]),    
+                    bancaName: parts[7] ? parts[7].trim().replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, ' ').trim() : 'Banca Importada', 
+                };
+
+                const metrics = calculateMetrics(rawRecord);
+                
+                const docRef = doc(collection(db, "bankroll_records")); // Gera novo ID
+                batch.set(docRef, {
+                    userId: user.uid,
+                    ...metrics,
+                    year: parseInt(rawRecord.year), // Garante formato numérico
+                    createdAt: new Date()
+                });
+                
+                importedCount++;
+            });
+
+            try {
+                await batch.commit();
+                alert(`${importedCount} registros importados e sincronizados com a nuvem!`);
+                
+                // Atualiza a view para o ano mais recente importado
+                const allYears = Object.keys(historicalData).sort().reverse();
+                if (allYears.length > 0 && selectedYear !== 'Total Geral') {
+                    setSelectedYear(allYears[0]);
+                }
+            } catch (error) {
+                console.error("Erro na importação em lote:", error);
+                alert("Erro ao importar dados. Tente importar menos linhas por vez.");
+            }
+        };
+        reader.readAsText(file);
     };
-    
+
     const handleDownloadTemplate = () => {
         const SEPARATOR = ';'; 
         const header = CSV_HEADERS.join(SEPARATOR) + '\n';
@@ -238,91 +393,24 @@ export default function BankrollManager() {
         document.body.removeChild(link);
     };
 
-    const handleImportCSV = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const csvText = event.target.result;
-            const lines = csvText.trim().split('\n');
-            let SEPARATOR = lines[0].includes(';') ? ';' : lines[0].includes(',') ? ',' : /\s{2,}/;
-            const isRegexSplit = SEPARATOR instanceof RegExp;
-            const dataLines = lines.slice(1); 
-            let importedCount = 0;
-            let currentHistory = { ...historicalData };
-
-            dataLines.forEach((line) => {
-                let parts;
-                if (isRegexSplit) {
-                    parts = line.split(/\s+/).filter(p => p.length > 0);
-                } else {
-                    parts = line.split(SEPARATOR);
-                }
-                
-                if (parts.length < 8 || parts.every(p => p.trim() === '')) return; 
-                
-                const monthString = parts[1]?.trim().toUpperCase();
-                const monthNumber = MONTH_ABBREVIATIONS[monthString] || safeNumber(parts[1]); 
-
-                const record = {
-                    year: safeNumber(parts[0]),       
-                    month: monthNumber, 
-                    inicio: safeNumber(parts[2]),     
-                    externo: safeNumber(parts[3]),    
-                    aposta: safeNumber(parts[4]),     
-                    investimento: safeNumber(parts[5]), 
-                    divisao: safeNumber(parts[6]),    
-                    bancaName: parts[7] ? parts[7].trim().replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, ' ').trim() : 'Banca Importada', 
-                };
-                currentHistory = saveSingleRecord(record, currentHistory);
-                importedCount++;
-            });
-
-            Object.keys(currentHistory).forEach(year => {
-                currentHistory[year].sort((a, b) => a.month - b.month);
-            });
-
-            localStorage.setItem('bankrollHistory', JSON.stringify(currentHistory));
-            setHistoricalData(currentHistory);
-            
-            const allYears = Object.keys(currentHistory).sort().reverse();
-            if (allYears.length > 0 && selectedYear !== 'Total Geral') {
-                setSelectedYear(allYears[0]);
-            }
-            alert(`${importedCount} registros importados com sucesso!`);
-        };
-        reader.readAsText(file);
-    };
-
     const availableBancas = useMemo(() => {
-        const allRecords = Object.keys(historicalData).flatMap(year => historicalData[year] || []);
+        const allRecords = Object.values(historicalData).flat();
         const names = [...new Set(allRecords.map(d => d.bancaName).filter(name => name))];
         return names.sort();
     }, [historicalData]);
     
-    // ------------------------------------------------------------------
-    // LÓGICA DE DADOS DA TABELA
-    // ------------------------------------------------------------------
+    // --- LÓGICA DE DADOS DA TABELA (Mantida a mesma lógica robusta anterior) ---
     const filteredData = useMemo(() => {
-        
-        // >>> MODO TOTAL GERAL: Agrupa por ANO
         if (selectedYear === 'Total Geral') {
             const availableYears = Object.keys(historicalData).sort();
-            
             return availableYears.map(year => {
                 let yearRecords = historicalData[year] || [];
-                
                 if (selectedBanca !== 'Todas as Bancas') {
                     yearRecords = yearRecords.filter(d => d.bancaName === selectedBanca);
                 }
-
                 if (yearRecords.length === 0) return null;
-
-                // Ordena registros do ano
                 yearRecords.sort((a, b) => a.month - b.month);
 
-                // --- Somas de Fluxo ---
                 const totalInvestimento = yearRecords.reduce((sum, r) => sum + r.investimento, 0);
                 const totalExterno = yearRecords.reduce((sum, r) => sum + r.externo, 0);
                 const totalResBruto = yearRecords.reduce((sum, r) => sum + r.resultadoBruto, 0);
@@ -330,8 +418,6 @@ export default function BankrollManager() {
                 const totalUnidadesLiq = yearRecords.reduce((sum, r) => sum + r.unidadesLiquida, 0);
                 const totalUnidadesBruto = yearRecords.reduce((sum, r) => sum + r.unidadesBruto, 0);
 
-                // --- CORREÇÃO DO INÍCIO, FINAL e APOSTA ---
-                // Agrupa por Banca para calcular corretamente o Início Total e o Final Total
                 const bankGroups = yearRecords.reduce((acc, r) => {
                     if (!acc[r.bancaName]) acc[r.bancaName] = [];
                     acc[r.bancaName].push(r);
@@ -343,18 +429,9 @@ export default function BankrollManager() {
                 let lastAposta = 0;
 
                 Object.values(bankGroups).forEach(recs => {
-                    // Ordena cronologicamente
                     recs.sort((a, b) => a.month - b.month);
-
-                    // 1. INÍCIO: Pega o PRIMEIRO mês que tenha valor de início > 0 (ou o primeiro cronológico)
-                    // Isso resolve o problema de somar apenas o primeiro registro da lista geral.
-                    // Agora somamos o primeiro registro de CADA banca.
                     const firstActive = recs.find(r => r.inicio > 0) || recs[0];
-                    if (firstActive) {
-                        totalInicioAno += firstActive.inicio;
-                    }
-
-                    // 2. FINAL: Pega o ÚLTIMO mês com saldo
+                    if (firstActive) totalInicioAno += firstActive.inicio;
                     const last = [...recs].reverse().find(r => r.finalBanca > 0);
                     if (last) {
                         lastFinal += last.finalBanca;
@@ -370,16 +447,13 @@ export default function BankrollManager() {
                     month: -1,
                     displayLabel: year,
                     bancaName: selectedBanca === 'Todas as Bancas' ? 'Múltiplas' : selectedBanca,
-                    
-                    inicio: totalInicioAno, // VALOR AGORA CORRETO
+                    inicio: totalInicioAno,
                     externo: totalExterno,
                     aposta: lastAposta,
                     investimento: totalInvestimento,
-                    
                     resultadoBruto: totalResBruto,
                     resultadoLiquido: totalResLiquido,
                     finalBanca: lastFinal,
-                    
                     unidadeValor: 0,
                     unidadesBruto: totalUnidadesBruto,
                     unidadesLiquida: totalUnidadesLiq,
@@ -388,9 +462,7 @@ export default function BankrollManager() {
             }).filter(Boolean);
         }
 
-        // >>> MODO ANO ESPECÍFICO (Lógica Mês a Mês)
         const yearlyData = historicalData[selectedYear] || [];
-        
         let dataToProcess = yearlyData;
         if (selectedBanca !== 'Todas as Bancas') {
              return dataToProcess
@@ -402,7 +474,6 @@ export default function BankrollManager() {
         const aggregatedByMonth = yearlyData.reduce((acc, current) => {
             const monthKey = current.month;
             if (monthKey < 0 || monthKey > 11) return acc;
-
             if (!acc[monthKey]) {
                 acc[monthKey] = {
                     id: `${selectedYear}-${monthKey}-total`, 
@@ -412,7 +483,6 @@ export default function BankrollManager() {
                     divisao: 0, inicio: 0, externo: 0, aposta: 0, investimento: 0,
                 };
             }
-            // Soma simples para o consolidado mensal
             acc[monthKey].inicio += current.inicio;
             acc[monthKey].externo += current.externo;
             acc[monthKey].investimento += current.investimento;
@@ -424,7 +494,6 @@ export default function BankrollManager() {
         return Object.values(aggregatedByMonth)
             .map(d => calculateMetrics(d)) 
             .sort((a, b) => a.month - b.month);
-        
     }, [historicalData, selectedYear, selectedBanca]);
 
     const formatValue = (value, isPercentage = false) => {
@@ -439,47 +508,21 @@ export default function BankrollManager() {
         return 'text-yellow-400';
     };
     
-    // --- TOTAIS DO RODAPÉ (FOOTER) ---
     const annualTotals = useMemo(() => {
-        if (filteredData.length === 0) {
-            return {
-                inicio: 0, externo: 0, aposta: 0, investimento: 0, 
-                resultadoBruto: 0, resultadoLiquido: 0, final: 0
-            };
-        }
-        
+        if (filteredData.length === 0) return { inicio: 0, externo: 0, aposta: 0, investimento: 0, resultadoBruto: 0, resultadoLiquido: 0, final: 0 };
         const totals = filteredData.reduce((acc, current) => {
-            // Se for Total Geral, o 'inicio' da linha já é um agregado calculado corretamente, então podemos somar.
-            // Mas para garantir precisão absoluta, vamos recalcular o Início Total Geral do zero abaixo.
-            if (selectedYear !== 'Total Geral') {
-                 // Modo Ano: Soma normal não faz sentido para Inicio, ignoramos aqui
-            } else {
-                 // Modo Total Geral: As linhas já são "Por Ano", somar início de 2023 + 2024 pode duplicar se a banca continuou.
-                 // Então ignoramos a soma de início aqui também.
-            }
-
             acc.externo += current.externo;
             acc.investimento += current.investimento;
             acc.resultadoBruto += current.resultadoBruto;
             acc.resultadoLiquido += current.resultadoLiquido;
             return acc;
-        }, {
-            inicio: 0, externo: 0, aposta: 0, investimento: 0, 
-            resultadoBruto: 0, resultadoLiquido: 0, final: 0
-        });
-        
-        // --- LÓGICA DE TOTALIZAÇÃO FINAL ---
+        }, { inicio: 0, externo: 0, aposta: 0, investimento: 0, resultadoBruto: 0, resultadoLiquido: 0, final: 0 });
         
         let dataSource = [];
-        if (selectedYear === 'Total Geral') {
-             dataSource = Object.values(historicalData).flat();
-        } else {
-             dataSource = historicalData[selectedYear] || [];
-        }
+        if (selectedYear === 'Total Geral') dataSource = Object.values(historicalData).flat();
+        else dataSource = historicalData[selectedYear] || [];
 
-        if (selectedBanca !== 'Todas as Bancas') {
-            dataSource = dataSource.filter(d => d.bancaName === selectedBanca);
-        }
+        if (selectedBanca !== 'Todas as Bancas') dataSource = dataSource.filter(d => d.bancaName === selectedBanca);
 
         const recordsByBank = dataSource.reduce((acc, r) => {
             if (!acc[r.bancaName]) acc[r.bancaName] = [];
@@ -496,18 +539,10 @@ export default function BankrollManager() {
                 if (Number(a.year) !== Number(b.year)) return Number(a.year) - Number(b.year);
                 return a.month - b.month;
             });
-
-            // 1. Início Total: Pega o PRIMEIRO registro cronológico absoluto desta banca
-            // Se eu tenho Banca A em 2023 (1k) e continua em 2024, o Início do "Total Geral" é 1k (capital original).
-            // Se o usuário quer somar aportes anuais, a lógica seria diferente, mas geralmente "Início" é o capital inicial daquele ciclo.
-            // Se estamos vendo "Total Geral" (All time), o Início deve ser o capital inicial PRIMORDIAL.
             if (bankRecords.length > 0) {
-                 // Procura o primeiro com valor > 0
                 const first = bankRecords.find(r => r.inicio > 0) || bankRecords[0];
                 if (first) sumInicio += first.inicio;
             }
-
-            // 2. Final Total: Pega o ÚLTIMO registro ativo
             const lastActiveRecord = [...bankRecords].reverse().find(r => r.finalBanca > 0);
             if (lastActiveRecord) {
                 sumFinal += lastActiveRecord.finalBanca;
@@ -515,79 +550,66 @@ export default function BankrollManager() {
             }
         });
 
-        // Caso especial: Se estivermos visualizando UM ANO específico (não total geral), 
-        // o Início do rodapé deve ser a soma dos inícios DESTE ANO.
         if (selectedYear !== 'Total Geral') {
              sumInicio = 0;
              Object.values(recordsByBank).forEach(bankRecords => {
-                // Filtra apenas registros deste ano (já garantido pelo dataSource, mas reforçando lógica)
                 const firstOfYear = bankRecords.find(r => r.inicio > 0) || bankRecords[0];
                 if (firstOfYear) sumInicio += firstOfYear.inicio;
              });
         }
-        // Se for Total Geral, e quisermos mostrar a soma de todos os inícios anuais (ex: aportes de 2023 + aportes de 2024)
-        // Isso depende da interpretação. Se for "Capital Total Injetado", devemos somar os inícios de cada ano.
-        // Vou assumir que para a LINHA DA TABELA (Ano 2025), o início é a soma das bancas de 2025.
-        // Para o FOOTER do Total Geral, o início deve ser a soma de todo capital inicial já colocado (Soma dos Inícios de cada banca).
         
         totals.inicio = sumInicio;
         totals.final = sumFinal;
         totals.aposta = sumAposta;
-        
         const annualVariacaoLiquida = totals.inicio > 0 ? totals.resultadoLiquido / totals.inicio : 0;
-        
         return { ...totals, annualVariacaoLiquida };
     }, [filteredData, selectedBanca, historicalData, selectedYear]);
 
-    // -----------------------------------------------------
-    // RENDERIZAÇÃO
-    // -----------------------------------------------------
+    // --- RENDERIZAÇÃO ---
+    if (!user) {
+        return (
+            <div className="flex flex-col items-center justify-center py-20 text-gray-400 bg-[#16202a] rounded-2xl border border-gray-800 shadow-xl max-w-4xl mx-auto mt-8">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mb-4 text-cyan-900" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                <h3 className="text-xl font-bold text-gray-200 mb-2">Acesso Restrito</h3>
+                <p className="text-sm">Faça login para gerenciar sua banca na nuvem e sincronizar entre dispositivos.</p>
+            </div>
+        );
+    }
 
     return (
         <div className="max-w-7xl mx-auto pb-16 pt-6 px-4">
-            
-            {/* 1. SEÇÃO DE FILTROS E TÍTULO */}
+            {/* Header de Carregamento */}
+            {loading && <div className="text-xs text-center text-cyan-500 mb-2 animate-pulse">Sincronizando dados da nuvem...</div>}
+
+            {/* SEÇÃO DE FILTROS E TÍTULO */}
             <div className="flex flex-col md:flex-row justify-between items-center mb-6 bg-[#16202a] p-4 rounded-2xl border border-gray-800 shadow-md">
                 <h2 className="text-xl font-bold text-gray-100 mb-4 md:mb-0">
                     <span className="bg-cyan-500/10 text-cyan-400 p-2 rounded mr-3">📊</span> 
                     Gerenciamento {selectedYear}
                 </h2>
-
                 <div className="flex space-x-4">
                     <div>
                         <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1 tracking-wider">Período</label>
-                        <select 
-                            value={selectedYear} 
-                            onChange={(e) => setSelectedYear(e.target.value)} 
-                            className="block w-32 p-2 text-sm border-gray-700 bg-gray-900 text-white rounded-lg focus:ring-2 focus:ring-cyan-500"
-                            disabled={editingRecordId !== null} 
-                        >
+                        <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="block w-32 p-2 text-sm border-gray-700 bg-gray-900 text-white rounded-lg focus:ring-2 focus:ring-cyan-500" disabled={editingRecordId !== null}>
                             {yearsOptions.map(y => <option key={y} value={y}>{y}</option>)}
                         </select>
                     </div>
-
                     <div>
                         <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1 tracking-wider">Banca</label>
-                        <select 
-                            value={selectedBanca} 
-                            onChange={(e) => setSelectedBanca(e.target.value)} 
-                            className="block w-48 p-2 text-sm border-gray-700 bg-gray-900 text-white rounded-lg focus:ring-2 focus:ring-cyan-500"
-                        >
+                        <select value={selectedBanca} onChange={(e) => setSelectedBanca(e.target.value)} className="block w-48 p-2 text-sm border-gray-700 bg-gray-900 text-white rounded-lg focus:ring-2 focus:ring-cyan-500">
                             <option value="Todas as Bancas">Todas as Bancas</option>
-                            {availableBancas.map(banca => (
-                                <option key={banca} value={banca}>{banca}</option>
-                            ))}
+                            {availableBancas.map(banca => <option key={banca} value={banca}>{banca}</option>)}
                         </select>
                     </div>
                 </div>
             </div>
 
-            {/* 2. TABELA */}
+            {/* TABELA */}
             <div className="bg-[#16202a] p-4 rounded-2xl border border-gray-800 mb-8 shadow-xl overflow-hidden">
                 {filteredData.length === 0 ? (
-                    <p className="text-gray-500 text-center py-10">
-                        Nenhum registro encontrado para {selectedYear} com a banca "{selectedBanca}". 
-                    </p>
+                    <p className="text-gray-500 text-center py-10">Nenhum registro encontrado para {selectedYear}.</p>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="min-w-full text-xs text-left text-gray-400">
@@ -615,37 +637,27 @@ export default function BankrollManager() {
                                             {row.isYearRow ? row.displayLabel : MONTHS_ABBREVIATED[row.month]} 
                                             {selectedYear === 'Total Geral' && <span className="text-[9px] text-gray-500 ml-1">(Resumo)</span>}
                                         </td>
-
-                                        <td className={`px-2 py-2 whitespace-nowrap max-w-[120px] truncate ${row.bancaName === 'Total Consolidado' ? 'font-black text-orange-400 bg-gray-800' : 'text-cyan-400'}`}>
-                                            {row.bancaName}
-                                        </td> 
-                                        
+                                        <td className={`px-2 py-2 whitespace-nowrap max-w-[120px] truncate ${row.bancaName === 'Total Consolidado' ? 'font-black text-orange-400 bg-gray-800' : 'text-cyan-400'}`}>{row.bancaName}</td> 
                                         <td className="px-2 py-2 text-center whitespace-nowrap">{formatValue(row.inicio)}</td>
                                         <td className="px-2 py-2 text-center whitespace-nowrap text-cyan-400">{row.isYearRow ? '-' : formatValue(row.unidadeValor)}</td>
                                         <td className="px-2 py-2 text-center whitespace-nowrap">{formatValue(row.investimento)}</td>
                                         <td className="px-2 py-2 text-center whitespace-nowrap">{formatValue(row.aposta)}</td>
                                         <td className={`px-2 py-2 text-center whitespace-nowrap ${getTrendClass(row.resultadoBruto)}`}>{formatValue(row.resultadoBruto)}</td>
                                         <td className={`px-2 py-2 text-center whitespace-nowrap ${getTrendClass(row.resultadoLiquido)}`}>{formatValue(row.resultadoLiquido)}</td>
-                                        
                                         <td className={`px-2 py-2 text-center ${getTrendClass(row.unidadesBruto)}`}>{row.unidadesBruto.toFixed(1)}</td>
                                         <td className={`px-2 py-2 text-center ${getTrendClass(row.unidadesLiquida)}`}>{row.unidadesLiquida.toFixed(1)}</td>
                                         <td className={`px-2 py-2 text-center ${getTrendClass(row.variacaoLiquida)}`}>{formatValue(row.variacaoLiquida, true)}</td>
-                                        
                                         <td className="px-2 py-2 text-center whitespace-nowrap font-black text-white bg-gray-800/30">{formatValue(row.finalBanca)}</td>
                                         <td className="px-2 py-2 text-center">
                                             {row.bancaName !== 'Total Consolidado' && selectedYear !== 'Total Geral' && (
-                                                <button onClick={() => handleEditRecord(row)} className="text-orange-400 hover:text-orange-300 transition-colors" title="Editar">
-                                                    ✏️
-                                                </button>
+                                                <button onClick={() => handleEditRecord(row)} className="text-orange-400 hover:text-orange-300 transition-colors" title="Editar">✏️</button>
                                             )}
                                         </td>
                                     </tr>
                                 ))}
                                 {/* Footer Totais */}
                                 <tr className="bg-cyan-900/40 border-t-2 border-cyan-500/80 font-black">
-                                     <td className="px-2 py-3 text-white uppercase tracking-wider" colSpan="2">
-                                         Total {selectedYear === 'Total Geral' ? 'Geral' : selectedYear}
-                                     </td>
+                                     <td className="px-2 py-3 text-white uppercase tracking-wider" colSpan="2">Total {selectedYear === 'Total Geral' ? 'Geral' : selectedYear}</td>
                                      <td className="px-2 py-3 text-center whitespace-nowrap text-cyan-300">{formatValue(annualTotals.inicio)}</td>
                                      <td className="px-2 py-3 text-center text-cyan-300">-</td>
                                      <td className="px-2 py-3 text-center whitespace-nowrap text-cyan-300">{formatValue(annualTotals.investimento)}</td>
@@ -664,16 +676,13 @@ export default function BankrollManager() {
                 )}
             </div>
 
-            <hr className="border-gray-800 my-10" />
-
-            {/* 3. FORMULÁRIO */}
+            {/* FORMULÁRIO DE ENTRADA MANUAL */}
             {selectedYear !== 'Total Geral' ? (
                 <div id="manual-form" className="bg-[#16202a] p-6 rounded-2xl shadow-lg border border-gray-800 mb-8 border-l-4 border-l-cyan-600">
                     <h3 className="text-sm font-bold text-gray-300 uppercase mb-4 flex items-center">
                         <span className="bg-cyan-500/10 text-cyan-400 p-1.5 rounded mr-3">{editingRecordId ? '✏️' : '➕'}</span> 
                         {editingRecordId ? 'Editando Registro' : 'Novo Registro Mensal'}
                     </h3>
-                    
                     <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
                         <InputField label="Banca (Nome)" value={newMonthInputs.bancaName} onChange={(e) => setNewMonthInputs(prev => ({ ...prev, bancaName: e.target.value }))} type="text" />
                         <div>
@@ -687,7 +696,6 @@ export default function BankrollManager() {
                         <InputField label="Investimento (R$)" value={newMonthInputs.investimento} onChange={handleInputChange} name="investimento" />
                         <InputField label="Divisão" value={newMonthInputs.divisao} onChange={handleInputChange} name="divisao" />
                     </div>
-                    
                     <div className="mt-4 flex justify-end space-x-3">
                         {editingRecordId && <button onClick={handleCancelEdit} className="text-gray-400 hover:text-gray-300 font-bold py-3 px-6 rounded-xl transition-all">Cancelar</button>}
                         <button onClick={handleSaveMonth} className={`font-bold py-3 px-6 rounded-xl transition-all shadow-lg ${editingRecordId ? 'bg-orange-600 hover:bg-orange-700 text-white shadow-orange-900/20' : 'bg-cyan-600 hover:bg-cyan-700 text-white shadow-cyan-900/20'}`}>{editingRecordId ? 'Atualizar' : `Salvar em ${selectedYear}`}</button>
@@ -699,21 +707,18 @@ export default function BankrollManager() {
                 </div>
             )}
 
-            {/* 4. IMPORTAÇÃO */}
+            {/* IMPORTAÇÃO */}
             <div className="bg-[#16202a] p-6 rounded-2xl shadow-lg border border-gray-800 mb-8 border-l-4 border-l-orange-500">
-                <h3 className="text-sm font-bold text-gray-300 uppercase mb-4 flex items-center">
-                    <span className="bg-orange-500/10 text-orange-400 p-1.5 rounded mr-3">📥</span> Importar Histórico
-                </h3>
+                <h3 className="text-sm font-bold text-gray-300 uppercase mb-4 flex items-center"><span className="bg-orange-500/10 text-orange-400 p-1.5 rounded mr-3">📥</span> Importar Histórico</h3>
                 <div className="flex justify-between items-center mb-4">
                     <p className="text-xs text-gray-500">Formato CSV: Ano; Mês; Início; Externo; Aposta; Inv; Divisão; Banca</p>
                     <div className="flex space-x-3">
-                        <button onClick={handleResetHistory} className="text-xs font-semibold text-red-400 hover:text-red-300">Resetar</button>
+                        <button onClick={handleResetHistory} className="text-xs font-semibold text-red-400 hover:text-red-300">Resetar (Nuvem)</button>
                         <button onClick={handleDownloadTemplate} className="text-xs font-semibold text-cyan-400 hover:text-cyan-300">Baixar Modelo</button>
                     </div>
                 </div>
                 <input key={selectedYear} type="file" accept=".csv" onChange={handleImportCSV} className="block w-full text-xs text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-cyan-500/20 file:text-cyan-400 hover:file:bg-cyan-500/30" />
             </div>
-
         </div>
     );
 }
