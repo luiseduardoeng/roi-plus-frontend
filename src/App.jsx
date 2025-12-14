@@ -673,7 +673,8 @@ function App() {
         )}
         
         {/* NOVO: Aba Gestão de Banca */}
-        {activeTab === 'bankroll' && <BankrollManager />}
+        {/* Passando a prop 'user' para identificar de quem é a banca */}
+        {activeTab === 'bankroll' && <BankrollManager user={user} />}
 
       </div>
 
