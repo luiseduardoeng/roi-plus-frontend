@@ -322,26 +322,39 @@ export default function BankrollManager() {
                 // Ordena registros do ano
                 yearRecords.sort((a, b) => a.month - b.month);
 
-                // --- CORREÇÃO: Início é o valor do primeiro mês do ano, não a soma ---
-                const firstRecord = yearRecords[0];
-                const totalInicio = firstRecord ? firstRecord.inicio : 0;
-                
+                // --- Somas de Fluxo ---
                 const totalInvestimento = yearRecords.reduce((sum, r) => sum + r.investimento, 0);
                 const totalExterno = yearRecords.reduce((sum, r) => sum + r.externo, 0);
                 const totalResBruto = yearRecords.reduce((sum, r) => sum + r.resultadoBruto, 0);
                 const totalResLiquido = yearRecords.reduce((sum, r) => sum + r.resultadoLiquido, 0);
+                const totalUnidadesLiq = yearRecords.reduce((sum, r) => sum + r.unidadesLiquida, 0);
+                const totalUnidadesBruto = yearRecords.reduce((sum, r) => sum + r.unidadesBruto, 0);
 
-                // Final/Aposta: Último registro ativo
-                let lastFinal = 0;
-                let lastAposta = 0;
-                
+                // --- CORREÇÃO DO INÍCIO, FINAL e APOSTA ---
+                // Agrupa por Banca para calcular corretamente o Início Total e o Final Total
                 const bankGroups = yearRecords.reduce((acc, r) => {
                     if (!acc[r.bancaName]) acc[r.bancaName] = [];
                     acc[r.bancaName].push(r);
                     return acc;
                 }, {});
 
+                let totalInicioAno = 0;
+                let lastFinal = 0;
+                let lastAposta = 0;
+
                 Object.values(bankGroups).forEach(recs => {
+                    // Ordena cronologicamente
+                    recs.sort((a, b) => a.month - b.month);
+
+                    // 1. INÍCIO: Pega o PRIMEIRO mês que tenha valor de início > 0 (ou o primeiro cronológico)
+                    // Isso resolve o problema de somar apenas o primeiro registro da lista geral.
+                    // Agora somamos o primeiro registro de CADA banca.
+                    const firstActive = recs.find(r => r.inicio > 0) || recs[0];
+                    if (firstActive) {
+                        totalInicioAno += firstActive.inicio;
+                    }
+
+                    // 2. FINAL: Pega o ÚLTIMO mês com saldo
                     const last = [...recs].reverse().find(r => r.finalBanca > 0);
                     if (last) {
                         lastFinal += last.finalBanca;
@@ -349,9 +362,7 @@ export default function BankrollManager() {
                     }
                 });
 
-                const variacaoLiquida = totalInicio > 0 ? totalResLiquido / totalInicio : 0;
-                const totalUnidadesLiq = yearRecords.reduce((sum, r) => sum + r.unidadesLiquida, 0);
-                const totalUnidadesBruto = yearRecords.reduce((sum, r) => sum + r.unidadesBruto, 0);
+                const variacaoLiquida = totalInicioAno > 0 ? totalResLiquido / totalInicioAno : 0;
 
                 return {
                     id: `summary-${year}`,
@@ -360,7 +371,7 @@ export default function BankrollManager() {
                     displayLabel: year,
                     bancaName: selectedBanca === 'Todas as Bancas' ? 'Múltiplas' : selectedBanca,
                     
-                    inicio: totalInicio, // CORRIGIDO AQUI
+                    inicio: totalInicioAno, // VALOR AGORA CORRETO
                     externo: totalExterno,
                     aposta: lastAposta,
                     investimento: totalInvestimento,
@@ -401,8 +412,7 @@ export default function BankrollManager() {
                     divisao: 0, inicio: 0, externo: 0, aposta: 0, investimento: 0,
                 };
             }
-            // OBS: Se estiver consolidando bancas no MESMO mês, aqui nós SOMAMOS
-            // Ex: Em Jan tenho banca A (1k) e banca B (1k), total Jan é 2k.
+            // Soma simples para o consolidado mensal
             acc[monthKey].inicio += current.inicio;
             acc[monthKey].externo += current.externo;
             acc[monthKey].investimento += current.investimento;
@@ -439,7 +449,15 @@ export default function BankrollManager() {
         }
         
         const totals = filteredData.reduce((acc, current) => {
-            // acc.inicio += current.inicio; // REMOVIDO: A soma simples está errada para 'Início'
+            // Se for Total Geral, o 'inicio' da linha já é um agregado calculado corretamente, então podemos somar.
+            // Mas para garantir precisão absoluta, vamos recalcular o Início Total Geral do zero abaixo.
+            if (selectedYear !== 'Total Geral') {
+                 // Modo Ano: Soma normal não faz sentido para Inicio, ignoramos aqui
+            } else {
+                 // Modo Total Geral: As linhas já são "Por Ano", somar início de 2023 + 2024 pode duplicar se a banca continuou.
+                 // Então ignoramos a soma de início aqui também.
+            }
+
             acc.externo += current.externo;
             acc.investimento += current.investimento;
             acc.resultadoBruto += current.resultadoBruto;
@@ -450,7 +468,7 @@ export default function BankrollManager() {
             resultadoBruto: 0, resultadoLiquido: 0, final: 0
         });
         
-        // --- LÓGICA CORRIGIDA PARA FINAL E INÍCIO ---
+        // --- LÓGICA DE TOTALIZAÇÃO FINAL ---
         
         let dataSource = [];
         if (selectedYear === 'Total Geral') {
@@ -463,7 +481,6 @@ export default function BankrollManager() {
             dataSource = dataSource.filter(d => d.bancaName === selectedBanca);
         }
 
-        // Agrupa por Nome da Banca
         const recordsByBank = dataSource.reduce((acc, r) => {
             if (!acc[r.bancaName]) acc[r.bancaName] = [];
             acc[r.bancaName].push(r);
@@ -475,18 +492,22 @@ export default function BankrollManager() {
         let sumInicio = 0;
 
         Object.values(recordsByBank).forEach(bankRecords => {
-            // Ordena cronologicamente Absoluta (Ano -> Mês)
             bankRecords.sort((a, b) => {
                 if (Number(a.year) !== Number(b.year)) return Number(a.year) - Number(b.year);
                 return a.month - b.month;
             });
 
-            // 1. Início: Pega o PRIMEIRO registro cronológico absoluto desta banca
+            // 1. Início Total: Pega o PRIMEIRO registro cronológico absoluto desta banca
+            // Se eu tenho Banca A em 2023 (1k) e continua em 2024, o Início do "Total Geral" é 1k (capital original).
+            // Se o usuário quer somar aportes anuais, a lógica seria diferente, mas geralmente "Início" é o capital inicial daquele ciclo.
+            // Se estamos vendo "Total Geral" (All time), o Início deve ser o capital inicial PRIMORDIAL.
             if (bankRecords.length > 0) {
-                sumInicio += bankRecords[0].inicio;
+                 // Procura o primeiro com valor > 0
+                const first = bankRecords.find(r => r.inicio > 0) || bankRecords[0];
+                if (first) sumInicio += first.inicio;
             }
 
-            // 2. Final: Pega o ÚLTIMO registro ativo desta banca
+            // 2. Final Total: Pega o ÚLTIMO registro ativo
             const lastActiveRecord = [...bankRecords].reverse().find(r => r.finalBanca > 0);
             if (lastActiveRecord) {
                 sumFinal += lastActiveRecord.finalBanca;
@@ -494,7 +515,22 @@ export default function BankrollManager() {
             }
         });
 
-        totals.inicio = sumInicio; // CORRIGIDO: Usa a soma dos inícios reais
+        // Caso especial: Se estivermos visualizando UM ANO específico (não total geral), 
+        // o Início do rodapé deve ser a soma dos inícios DESTE ANO.
+        if (selectedYear !== 'Total Geral') {
+             sumInicio = 0;
+             Object.values(recordsByBank).forEach(bankRecords => {
+                // Filtra apenas registros deste ano (já garantido pelo dataSource, mas reforçando lógica)
+                const firstOfYear = bankRecords.find(r => r.inicio > 0) || bankRecords[0];
+                if (firstOfYear) sumInicio += firstOfYear.inicio;
+             });
+        }
+        // Se for Total Geral, e quisermos mostrar a soma de todos os inícios anuais (ex: aportes de 2023 + aportes de 2024)
+        // Isso depende da interpretação. Se for "Capital Total Injetado", devemos somar os inícios de cada ano.
+        // Vou assumir que para a LINHA DA TABELA (Ano 2025), o início é a soma das bancas de 2025.
+        // Para o FOOTER do Total Geral, o início deve ser a soma de todo capital inicial já colocado (Soma dos Inícios de cada banca).
+        
+        totals.inicio = sumInicio;
         totals.final = sumFinal;
         totals.aposta = sumAposta;
         
