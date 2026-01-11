@@ -163,7 +163,6 @@ export default function BankrollManager({ user }) {
         setNewMonthInputs(prev => ({ ...prev, [name]: newValue }));
     };
     
-    // --- FUNÇÃO DE EXCLUIR REGISTRO ---
     const handleDeleteRecord = async (recordId) => {
         if (!confirm("Tem certeza que deseja excluir este registro?")) return;
         try {
@@ -415,7 +414,7 @@ export default function BankrollManager({ user }) {
         return names.sort();
     }, [historicalData]);
     
-    // --- CÁLCULO DE SAQUES (ANO A ANO: Final Prev - Inicio Curr) ---
+    // --- CÁLCULO DE SAQUES ---
     const withdrawalsData = useMemo(() => {
         const years = Object.keys(historicalData).sort();
         const banks = availableBancas;
@@ -440,7 +439,6 @@ export default function BankrollManager({ user }) {
                 const firstRecord = bankRecordsNext[0]; 
                 const startVal = firstRecord ? firstRecord.inicio : 0;
 
-                // SAQUE: FINAL ANO ANTERIOR - INICIO ANO SEGUINTE (POSITIVO)
                 let diff = 0;
                 if (lastRecord && firstRecord) {
                     const rawDiff = finalVal - startVal;
@@ -529,13 +527,11 @@ export default function BankrollManager({ user }) {
         }, { total: 0 });
     }, [investmentsTableData, availableBancas]);
 
-    // --- DASHBOARD GERAL (QUADRADOS) ---
+    // --- DASHBOARD GERAL (4 QUADRADOS) ---
     const dashboardStats = useMemo(() => {
-        // Totais de Saque e Investimento (Globais)
         const totalInvestido = investmentsTotal ? investmentsTotal.total : 0;
         const totalSaques = withdrawalsTotal ? withdrawalsTotal.total : 0;
 
-        // Saldo Atual (Última banca registrada de cada banca ativa)
         let currentEquity = 0;
         const years = Object.keys(historicalData).sort();
         if (years.length > 0) {
@@ -552,13 +548,14 @@ export default function BankrollManager({ user }) {
             });
         }
 
-        // ROI = ((Saldo Atual + Saques - Investimento) / Investimento) * 100
-        const profit = (currentEquity + totalSaques) - totalInvestido;
-        const roi = totalInvestido > 0 ? (profit / totalInvestido) : 0;
+        // FÓRMULA ATUALIZADA: ((Saldo + Saques) / Investido) * 100
+        const rawReturn = currentEquity + totalSaques;
+        const roi = totalInvestido > 0 ? (rawReturn / totalInvestido) * 100 : 0;
 
         return {
             totalInvestido,
             totalSaques,
+            currentEquity, // Saldo Atual das Bancas
             roi
         };
     }, [investmentsTotal, withdrawalsTotal, historicalData, availableBancas]);
@@ -806,11 +803,16 @@ export default function BankrollManager({ user }) {
                 </div>
             </div>
 
-            {/* --- DASHBOARD (3 QUADRADOS) --- */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            {/* --- DASHBOARD (4 QUADRADOS) --- */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 <div className="bg-[#16202a] p-4 rounded-xl border border-gray-800 shadow-lg flex flex-col items-center justify-center">
                     <span className="text-xs text-gray-500 uppercase tracking-widest font-bold mb-1">Total Investido</span>
                     <span className="text-2xl font-black text-cyan-400">{formatValue(dashboardStats.totalInvestido)}</span>
+                </div>
+                {/* NOVO QUADRADO: SALDO BANCAS */}
+                <div className="bg-[#16202a] p-4 rounded-xl border border-gray-800 shadow-lg flex flex-col items-center justify-center">
+                    <span className="text-xs text-gray-500 uppercase tracking-widest font-bold mb-1">Saldo Bancas</span>
+                    <span className="text-2xl font-black text-indigo-400">{formatValue(dashboardStats.currentEquity)}</span>
                 </div>
                 <div className="bg-[#16202a] p-4 rounded-xl border border-gray-800 shadow-lg flex flex-col items-center justify-center">
                     <span className="text-xs text-gray-500 uppercase tracking-widest font-bold mb-1">Total Saques</span>
