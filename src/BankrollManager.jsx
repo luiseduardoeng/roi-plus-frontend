@@ -414,7 +414,7 @@ export default function BankrollManager({ user }) {
         return names.sort();
     }, [historicalData]);
     
-    // --- CÁLCULO DE SAQUES ---
+    // --- CÁLCULO DE SAQUES (ANO A ANO: Final Prev - Inicio Curr) ---
     const withdrawalsData = useMemo(() => {
         const years = Object.keys(historicalData).sort();
         const banks = availableBancas;
@@ -439,6 +439,7 @@ export default function BankrollManager({ user }) {
                 const firstRecord = bankRecordsNext[0]; 
                 const startVal = firstRecord ? firstRecord.inicio : 0;
 
+                // SAQUE: FINAL ANO ANTERIOR - INICIO ANO SEGUINTE (POSITIVO)
                 let diff = 0;
                 if (lastRecord && firstRecord) {
                     const rawDiff = finalVal - startVal;
@@ -548,9 +549,10 @@ export default function BankrollManager({ user }) {
             });
         }
 
-        // FÓRMULA ATUALIZADA: ((Saldo + Saques) / Investido) * 100
+        // FÓRMULA ATUALIZADA: ((Saldo + Saques) / Investido) 
+        // OBS: Removemos o *100 daqui porque o formatValue já faz isso quando isPercentage=true
         const rawReturn = currentEquity + totalSaques;
-        const roi = totalInvestido > 0 ? (rawReturn / totalInvestido) * 100 : 0;
+        const roi = totalInvestido > 0 ? (rawReturn / totalInvestido) : 0;
 
         return {
             totalInvestido,
