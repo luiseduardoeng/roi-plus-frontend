@@ -9,7 +9,8 @@ import {
     query, 
     where, 
     onSnapshot,
-    writeBatch
+    writeBatch,
+    getDocs
 } from 'firebase/firestore';
 
 // --- Funções Auxiliares ---
@@ -100,8 +101,8 @@ export default function BankrollManager({ user }) {
     const currentYear = new Date().getFullYear().toString();
     
     const yearsOptions = useMemo(() => {
-        const last5Years = Array.from({ length: 5 }, (_, i) => (currentYear - i).toString());
-        return ['Total Geral', ...last5Years];
+        const lastYears = Array.from({ length: 7 }, (_, i) => (currentYear - i).toString());
+        return ['Total Geral', ...lastYears];
     }, [currentYear]);
 
     const [selectedYear, setSelectedYear] = useState(currentYear);
@@ -162,6 +163,18 @@ export default function BankrollManager({ user }) {
         setNewMonthInputs(prev => ({ ...prev, [name]: newValue }));
     };
     
+    // --- FUNÇÃO DE EXCLUIR REGISTRO ---
+    const handleDeleteRecord = async (recordId) => {
+        if (!confirm("Tem certeza que deseja excluir este registro?")) return;
+        try {
+            await deleteDoc(doc(db, "bankroll_records", recordId));
+            alert("Registro excluído com sucesso.");
+        } catch (error) {
+            console.error("Erro ao excluir:", error);
+            alert("Erro ao excluir registro.");
+        }
+    };
+
     const handleSaveMonth = async () => {
         if (!user) {
             alert("Você precisa estar logado para salvar dados.");
@@ -172,8 +185,9 @@ export default function BankrollManager({ user }) {
             return;
         }
 
-        const year = selectedYear;
+        const year = parseInt(selectedYear);
         const monthIndex = parseInt(newMonthInputs.month);
+        const currentBancaName = newMonthInputs.bancaName.trim();
         
         const metrics = calculateMetrics({ 
             ...newMonthInputs, 
@@ -182,15 +196,32 @@ export default function BankrollManager({ user }) {
 
         const recordData = {
             userId: user.uid,
-            year: parseInt(year),
+            year: year,
             month: monthIndex,
             ...metrics,
             updatedAt: new Date()
         };
 
         try {
-            if (editingRecordId) {
-                const docRef = doc(db, "bankroll_records", editingRecordId);
+            let docIdToUpdate = editingRecordId;
+
+            if (!docIdToUpdate) {
+                const checkQuery = query(
+                    collection(db, "bankroll_records"),
+                    where("userId", "==", user.uid),
+                    where("year", "==", year),
+                    where("month", "==", monthIndex),
+                    where("bancaName", "==", currentBancaName)
+                );
+                
+                const querySnapshot = await getDocs(checkQuery);
+                if (!querySnapshot.empty) {
+                    docIdToUpdate = querySnapshot.docs[0].id;
+                }
+            }
+
+            if (docIdToUpdate) {
+                const docRef = doc(db, "bankroll_records", docIdToUpdate);
                 await updateDoc(docRef, recordData);
                 alert("Registro atualizado com sucesso!");
             } else {
@@ -198,8 +229,9 @@ export default function BankrollManager({ user }) {
                     ...recordData,
                     createdAt: new Date()
                 });
-                alert("Registro salvo com sucesso!");
+                alert("Novo mês registrado com sucesso!");
             }
+            
             handleCancelEdit();
         } catch (error) {
             console.error("Erro ao salvar:", error);
@@ -212,14 +244,12 @@ export default function BankrollManager({ user }) {
         
         if (confirm("ATENÇÃO: Isso apagará TODOS os seus registros de banca na nuvem. Essa ação não pode ser desfeita. Tem certeza?")) {
             try {
-                // Para deletar muitos registros, precisamos fazer em lotes
                 const allIds = Object.values(historicalData).flat().map(r => r.id);
                 if (allIds.length === 0) {
                     alert("Não há registros para apagar.");
                     return;
                 }
 
-                // Divide em lotes de 400 para deletar
                 const chunkSize = 400;
                 for (let i = 0; i < allIds.length; i += chunkSize) {
                     const chunk = allIds.slice(i, i + chunkSize);
@@ -257,7 +287,7 @@ export default function BankrollManager({ user }) {
             bancaName: record.bancaName,
             month: record.month.toString(),
             inicio: record.inicio,
-            externo: record.externo,
+            externo: record.externo || 0,
             aposta: record.aposta,
             investimento: record.investimento,
             divisao: record.divisao,
@@ -280,7 +310,7 @@ export default function BankrollManager({ user }) {
         });
     }
     
-    // --- IMPORTAÇÃO DE CSV CORRIGIDA (EM LOTES) ---
+    // --- IMPORTAÇÃO DE CSV ---
     const handleImportCSV = (e) => {
         const file = e.target.files[0];
         if (!file || !user) {
@@ -296,7 +326,6 @@ export default function BankrollManager({ user }) {
             const isRegexSplit = SEPARATOR instanceof RegExp;
             const dataLines = lines.slice(1); 
             
-            // 1. Processar todos os dados primeiro
             const recordsToSave = [];
             dataLines.forEach((line) => {
                 let parts;
@@ -314,13 +343,13 @@ export default function BankrollManager({ user }) {
                 if (monthNumber >= 1 && monthNumber <= 12) monthIndex = monthNumber - 1;
 
                 const rawRecord = {
-                    year: safeNumber(parts[0]),       
+                    year: safeNumber(parts[0]),        
                     month: monthIndex, 
-                    inicio: safeNumber(parts[2]),     
-                    externo: safeNumber(parts[3]),    
-                    aposta: safeNumber(parts[4]),     
+                    inicio: safeNumber(parts[2]),       
+                    externo: safeNumber(parts[3]),      
+                    aposta: safeNumber(parts[4]),       
                     investimento: safeNumber(parts[5]), 
-                    divisao: safeNumber(parts[6]),    
+                    divisao: safeNumber(parts[6]),      
                     bancaName: parts[7] ? parts[7].trim().replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, ' ').trim() : 'Banca Importada', 
                 };
 
@@ -334,7 +363,6 @@ export default function BankrollManager({ user }) {
                 });
             });
 
-            // 2. Enviar em lotes de 450 (limite seguro do Firebase é 500)
             const CHUNK_SIZE = 450;
             let importedCount = 0;
 
@@ -350,7 +378,6 @@ export default function BankrollManager({ user }) {
 
                     await batch.commit();
                     importedCount += chunk.length;
-                    console.log(`Lote importado: ${importedCount} registros...`);
                 }
 
                 alert(`${importedCount} registros importados com sucesso!`);
@@ -388,6 +415,155 @@ export default function BankrollManager({ user }) {
         return names.sort();
     }, [historicalData]);
     
+    // --- CÁLCULO DE SAQUES (ANO A ANO: Final Prev - Inicio Curr) ---
+    const withdrawalsData = useMemo(() => {
+        const years = Object.keys(historicalData).sort();
+        const banks = availableBancas;
+        const result = [];
+
+        for (let i = 0; i < years.length - 1; i++) {
+            const currentYear = years[i];
+            const nextYear = years[i+1];
+            const rowData = { year: currentYear, banks: {}, total: 0 };
+
+            const currentYearRecords = historicalData[currentYear] || [];
+            const nextYearRecords = historicalData[nextYear] || [];
+
+            banks.forEach(bank => {
+                const bankRecordsCurr = currentYearRecords.filter(r => r.bancaName === bank);
+                bankRecordsCurr.sort((a,b) => a.month - b.month);
+                const lastRecord = bankRecordsCurr[bankRecordsCurr.length - 1];
+                const finalVal = lastRecord ? lastRecord.finalBanca : 0;
+
+                const bankRecordsNext = nextYearRecords.filter(r => r.bancaName === bank);
+                bankRecordsNext.sort((a,b) => a.month - b.month);
+                const firstRecord = bankRecordsNext[0]; 
+                const startVal = firstRecord ? firstRecord.inicio : 0;
+
+                // SAQUE: FINAL ANO ANTERIOR - INICIO ANO SEGUINTE (POSITIVO)
+                let diff = 0;
+                if (lastRecord && firstRecord) {
+                    const rawDiff = finalVal - startVal;
+                    if (rawDiff > 0) diff = rawDiff;
+                }
+
+                rowData.banks[bank] = diff;
+                rowData.total += diff;
+            });
+            result.push(rowData);
+        }
+        return result;
+    }, [historicalData, availableBancas]);
+
+    const withdrawalsTotal = useMemo(() => {
+        if (withdrawalsData.length === 0) return null;
+        return withdrawalsData.reduce((acc, row) => {
+            availableBancas.forEach(banca => {
+                acc[banca] = (acc[banca] || 0) + (row.banks[banca] || 0);
+            });
+            acc.total += row.total;
+            return acc;
+        }, { total: 0 });
+    }, [withdrawalsData, availableBancas]);
+
+    // --- CÁLCULO DE INVESTIMENTOS ---
+    const investmentsTableData = useMemo(() => {
+        const years = Object.keys(historicalData).sort();
+        const banks = availableBancas;
+        const result = [];
+
+        for (let i = 0; i < years.length; i++) {
+            const currentYear = years[i];
+            const prevYear = i > 0 ? years[i-1] : null;
+            const rowData = { year: currentYear, banks: {}, total: 0 };
+
+            const currentYearRecords = historicalData[currentYear] || [];
+            const prevYearRecords = prevYear ? (historicalData[prevYear] || []) : [];
+
+            banks.forEach(bank => {
+                const bankRecordsCurr = currentYearRecords.filter(r => r.bancaName === bank);
+                bankRecordsCurr.sort((a,b) => a.month - b.month);
+                const firstRecord = bankRecordsCurr[0];
+                const startVal = firstRecord ? firstRecord.inicio : 0;
+
+                let finalVal = 0;
+                let hasPrevRecord = false;
+                
+                if (prevYear) {
+                    const bankRecordsPrev = prevYearRecords.filter(r => r.bancaName === bank);
+                    bankRecordsPrev.sort((a,b) => a.month - b.month);
+                    const lastRecord = bankRecordsPrev[bankRecordsPrev.length - 1];
+                    if (lastRecord) {
+                        finalVal = lastRecord.finalBanca;
+                        hasPrevRecord = true;
+                    }
+                }
+
+                let investment = 0;
+                if (firstRecord) {
+                    if (!hasPrevRecord) {
+                        investment = startVal;
+                    } else {
+                        const diff = startVal - finalVal;
+                        if (diff > 0) investment = diff;
+                    }
+                }
+
+                rowData.banks[bank] = investment;
+                rowData.total += investment;
+            });
+            
+            result.push(rowData);
+        }
+        return result;
+    }, [historicalData, availableBancas]);
+
+    const investmentsTotal = useMemo(() => {
+        if (investmentsTableData.length === 0) return null;
+        return investmentsTableData.reduce((acc, row) => {
+            availableBancas.forEach(banca => {
+                acc[banca] = (acc[banca] || 0) + (row.banks[banca] || 0);
+            });
+            acc.total += row.total;
+            return acc;
+        }, { total: 0 });
+    }, [investmentsTableData, availableBancas]);
+
+    // --- DASHBOARD GERAL (QUADRADOS) ---
+    const dashboardStats = useMemo(() => {
+        // Totais de Saque e Investimento (Globais)
+        const totalInvestido = investmentsTotal ? investmentsTotal.total : 0;
+        const totalSaques = withdrawalsTotal ? withdrawalsTotal.total : 0;
+
+        // Saldo Atual (Última banca registrada de cada banca ativa)
+        let currentEquity = 0;
+        const years = Object.keys(historicalData).sort();
+        if (years.length > 0) {
+            const lastYear = years[years.length - 1];
+            const lastYearRecords = historicalData[lastYear] || [];
+            
+            availableBancas.forEach(bank => {
+                const bankRecords = lastYearRecords.filter(r => r.bancaName === bank);
+                bankRecords.sort((a, b) => a.month - b.month);
+                const lastRecord = bankRecords[bankRecords.length - 1];
+                if (lastRecord) {
+                    currentEquity += lastRecord.finalBanca;
+                }
+            });
+        }
+
+        // ROI = ((Saldo Atual + Saques - Investimento) / Investimento) * 100
+        const profit = (currentEquity + totalSaques) - totalInvestido;
+        const roi = totalInvestido > 0 ? (profit / totalInvestido) : 0;
+
+        return {
+            totalInvestido,
+            totalSaques,
+            roi
+        };
+    }, [investmentsTotal, withdrawalsTotal, historicalData, availableBancas]);
+
+
     const filteredData = useMemo(() => {
         if (selectedYear === 'Total Geral') {
             const availableYears = Object.keys(historicalData).sort();
@@ -400,11 +576,8 @@ export default function BankrollManager({ user }) {
                 yearRecords.sort((a, b) => a.month - b.month);
 
                 const totalInvestimento = yearRecords.reduce((sum, r) => sum + r.investimento, 0);
-                const totalExterno = yearRecords.reduce((sum, r) => sum + r.externo, 0);
                 const totalResBruto = yearRecords.reduce((sum, r) => sum + r.resultadoBruto, 0);
                 const totalResLiquido = yearRecords.reduce((sum, r) => sum + r.resultadoLiquido, 0);
-                const totalUnidadesLiq = yearRecords.reduce((sum, r) => sum + r.unidadesLiquida, 0);
-                const totalUnidadesBruto = yearRecords.reduce((sum, r) => sum + r.unidadesBruto, 0);
 
                 const bankGroups = yearRecords.reduce((acc, r) => {
                     if (!acc[r.bancaName]) acc[r.bancaName] = [];
@@ -415,7 +588,9 @@ export default function BankrollManager({ user }) {
                 let totalInicioAno = 0;
                 let lastFinal = 0;
                 let lastAposta = 0;
-
+                let lastExterno = 0; 
+                let lastDivisao = 0;
+                
                 Object.values(bankGroups).forEach(recs => {
                     recs.sort((a, b) => a.month - b.month);
                     const firstActive = recs.find(r => r.inicio > 0) || recs[0];
@@ -424,10 +599,17 @@ export default function BankrollManager({ user }) {
                     if (last) {
                         lastFinal += last.finalBanca;
                         lastAposta += last.aposta;
+                        lastExterno += last.externo;
+                        lastDivisao = last.divisao; 
                     }
                 });
 
                 const variacaoLiquida = totalInicioAno > 0 ? totalResLiquido / totalInicioAno : 0;
+                
+                const yearUnidadeValor = lastDivisao > 0 ? lastAposta / lastDivisao : 0;
+                
+                const totalUnidadesBruto = yearUnidadeValor > 0 ? totalResBruto / yearUnidadeValor : 0;
+                const totalUnidadesLiq = yearUnidadeValor > 0 ? totalResLiquido / yearUnidadeValor : 0;
 
                 return {
                     id: `summary-${year}`,
@@ -436,13 +618,14 @@ export default function BankrollManager({ user }) {
                     displayLabel: year,
                     bancaName: selectedBanca === 'Todas as Bancas' ? 'Múltiplas' : selectedBanca,
                     inicio: totalInicioAno,
-                    externo: totalExterno,
+                    externo: lastExterno,
+                    divisao: lastDivisao,
                     aposta: lastAposta,
                     investimento: totalInvestimento,
                     resultadoBruto: totalResBruto,
                     resultadoLiquido: totalResLiquido,
                     finalBanca: lastFinal,
-                    unidadeValor: 0,
+                    unidadeValor: yearUnidadeValor, 
                     unidadesBruto: totalUnidadesBruto,
                     unidadesLiquida: totalUnidadesLiq,
                     variacaoLiquida: variacaoLiquida
@@ -474,7 +657,7 @@ export default function BankrollManager({ user }) {
             acc[monthKey].inicio += current.inicio;
             acc[monthKey].externo += current.externo;
             acc[monthKey].investimento += current.investimento;
-            acc[monthKey].divisao += current.divisao; 
+            acc[monthKey].divisao = current.divisao; 
             acc[monthKey].aposta += current.aposta; 
             return acc;
         }, {});
@@ -496,15 +679,16 @@ export default function BankrollManager({ user }) {
         return 'text-yellow-400';
     };
     
+    // --- LÓGICA DO TOTAL GERAL (ANNUAL TOTALS) ---
     const annualTotals = useMemo(() => {
-        if (filteredData.length === 0) return { inicio: 0, externo: 0, aposta: 0, investimento: 0, resultadoBruto: 0, resultadoLiquido: 0, final: 0 };
+        if (filteredData.length === 0) return { inicio: 0, externo: 0, aposta: 0, investimento: 0, resultadoBruto: 0, resultadoLiquido: 0, final: 0, divisao: 0 };
+        
         const totals = filteredData.reduce((acc, current) => {
-            acc.externo += current.externo;
             acc.investimento += current.investimento;
             acc.resultadoBruto += current.resultadoBruto;
             acc.resultadoLiquido += current.resultadoLiquido;
             return acc;
-        }, { inicio: 0, externo: 0, aposta: 0, investimento: 0, resultadoBruto: 0, resultadoLiquido: 0, final: 0 });
+        }, { inicio: 0, externo: 0, aposta: 0, investimento: 0, resultadoBruto: 0, resultadoLiquido: 0, final: 0, divisao: 0 });
         
         let dataSource = [];
         if (selectedYear === 'Total Geral') dataSource = Object.values(historicalData).flat();
@@ -521,6 +705,8 @@ export default function BankrollManager({ user }) {
         let sumFinal = 0;
         let sumAposta = 0;
         let sumInicio = 0;
+        let sumExterno = 0;
+        let lastDivisao = 0;
 
         Object.values(recordsByBank).forEach(bankRecords => {
             bankRecords.sort((a, b) => {
@@ -535,6 +721,8 @@ export default function BankrollManager({ user }) {
             if (lastActiveRecord) {
                 sumFinal += lastActiveRecord.finalBanca;
                 sumAposta += lastActiveRecord.aposta;
+                sumExterno += lastActiveRecord.externo;
+                lastDivisao = lastActiveRecord.divisao; 
             }
         });
 
@@ -549,8 +737,35 @@ export default function BankrollManager({ user }) {
         totals.inicio = sumInicio;
         totals.final = sumFinal;
         totals.aposta = sumAposta;
+        totals.externo = sumExterno;
+        totals.divisao = lastDivisao;
+
+        // --- CÁLCULOS ESPECÍFICOS PARA O TOTAL ---
+        const totalUnidadeValor = totals.divisao > 0 ? totals.aposta / totals.divisao : 0;
+        
+        // --- MÉDIA DA UNIDADE PARA O TOTAL GERAL ---
+        let averageUnitValue = 0;
+        if (selectedYear === 'Total Geral') {
+            const validUnitRows = filteredData.filter(r => r.unidadeValor > 0);
+            const sumUnits = validUnitRows.reduce((acc, r) => acc + r.unidadeValor, 0);
+            averageUnitValue = validUnitRows.length > 0 ? sumUnits / validUnitRows.length : 0;
+        }
+
+        const divisorParaUnidades = selectedYear === 'Total Geral' ? averageUnitValue : totalUnidadeValor;
+
+        const totalUnidadesBruto = divisorParaUnidades > 0 ? totals.resultadoBruto / divisorParaUnidades : 0;
+        const totalUnidadesLiquida = divisorParaUnidades > 0 ? totals.resultadoLiquido / divisorParaUnidades : 0;
+        
         const annualVariacaoLiquida = totals.inicio > 0 ? totals.resultadoLiquido / totals.inicio : 0;
-        return { ...totals, annualVariacaoLiquida };
+
+        return { 
+            ...totals, 
+            annualVariacaoLiquida, 
+            totalUnidadeValor, 
+            totalUnidadesBruto, 
+            totalUnidadesLiquida,
+            averageUnitValue 
+        };
     }, [filteredData, selectedBanca, historicalData, selectedYear]);
 
     if (!user) {
@@ -591,6 +806,22 @@ export default function BankrollManager({ user }) {
                 </div>
             </div>
 
+            {/* --- DASHBOARD (3 QUADRADOS) --- */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="bg-[#16202a] p-4 rounded-xl border border-gray-800 shadow-lg flex flex-col items-center justify-center">
+                    <span className="text-xs text-gray-500 uppercase tracking-widest font-bold mb-1">Total Investido</span>
+                    <span className="text-2xl font-black text-cyan-400">{formatValue(dashboardStats.totalInvestido)}</span>
+                </div>
+                <div className="bg-[#16202a] p-4 rounded-xl border border-gray-800 shadow-lg flex flex-col items-center justify-center">
+                    <span className="text-xs text-gray-500 uppercase tracking-widest font-bold mb-1">Total Saques</span>
+                    <span className="text-2xl font-black text-green-400">{formatValue(dashboardStats.totalSaques)}</span>
+                </div>
+                <div className="bg-[#16202a] p-4 rounded-xl border border-gray-800 shadow-lg flex flex-col items-center justify-center">
+                    <span className="text-xs text-gray-500 uppercase tracking-widest font-bold mb-1">ROI Geral</span>
+                    <span className={`text-2xl font-black ${getTrendClass(dashboardStats.roi)}`}>{formatValue(dashboardStats.roi, true)}</span>
+                </div>
+            </div>
+
             <div className="bg-[#16202a] p-4 rounded-2xl border border-gray-800 mb-8 shadow-xl overflow-hidden">
                 {filteredData.length === 0 ? (
                     <p className="text-gray-500 text-center py-10">Nenhum registro encontrado para {selectedYear}.</p>
@@ -602,9 +833,11 @@ export default function BankrollManager({ user }) {
                                     <th className="px-2 py-3">{selectedYear === 'Total Geral' ? 'Ano' : 'Mês'}</th>
                                     <th className="px-2 py-3">Banca</th> 
                                     <th className="px-2 py-3 text-center whitespace-nowrap">Início</th>
-                                    <th className="px-2 py-3 text-center whitespace-nowrap">R$ Unidade</th>
-                                    <th className="px-2 py-3 text-center whitespace-nowrap">Inv.</th>
+                                    {/* COLUNA EXTERNO OCULTA */}
                                     <th className="px-2 py-3 text-center whitespace-nowrap">Aposta</th>
+                                    <th className="px-2 py-3 text-center whitespace-nowrap">Inv.</th>
+                                    <th className="px-2 py-3 text-center whitespace-nowrap text-gray-500">Divisão</th>
+                                    <th className="px-2 py-3 text-center whitespace-nowrap">R$ Unidade</th>
                                     <th className="px-2 py-3 text-center font-bold whitespace-nowrap">Res. Bruto</th>
                                     <th className="px-2 py-3 text-center font-bold whitespace-nowrap">R. Líquido</th>
                                     <th className="px-2 py-3 text-center">U. Bruto</th>
@@ -623,9 +856,13 @@ export default function BankrollManager({ user }) {
                                         </td>
                                         <td className={`px-2 py-2 whitespace-nowrap max-w-[120px] truncate ${row.bancaName === 'Total Consolidado' ? 'font-black text-orange-400 bg-gray-800' : 'text-cyan-400'}`}>{row.bancaName}</td> 
                                         <td className="px-2 py-2 text-center whitespace-nowrap">{formatValue(row.inicio)}</td>
-                                        <td className="px-2 py-2 text-center whitespace-nowrap text-cyan-400">{row.isYearRow ? '-' : formatValue(row.unidadeValor)}</td>
-                                        <td className="px-2 py-2 text-center whitespace-nowrap">{formatValue(row.investimento)}</td>
+                                        
+                                        {/* COLUNA EXTERNO OCULTA */}
                                         <td className="px-2 py-2 text-center whitespace-nowrap">{formatValue(row.aposta)}</td>
+                                        <td className="px-2 py-2 text-center whitespace-nowrap">{formatValue(row.investimento)}</td>
+                                        <td className="px-2 py-2 text-center whitespace-nowrap text-gray-500">{row.divisao}</td>
+                                        <td className="px-2 py-2 text-center whitespace-nowrap text-cyan-400">{formatValue(row.unidadeValor)}</td>
+                                        
                                         <td className={`px-2 py-2 text-center whitespace-nowrap ${getTrendClass(row.resultadoBruto)}`}>{formatValue(row.resultadoBruto)}</td>
                                         <td className={`px-2 py-2 text-center whitespace-nowrap ${getTrendClass(row.resultadoLiquido)}`}>{formatValue(row.resultadoLiquido)}</td>
                                         <td className={`px-2 py-2 text-center ${getTrendClass(row.unidadesBruto)}`}>{row.unidadesBruto.toFixed(1)}</td>
@@ -634,21 +871,38 @@ export default function BankrollManager({ user }) {
                                         <td className="px-2 py-2 text-center whitespace-nowrap font-black text-white bg-gray-800/30">{formatValue(row.finalBanca)}</td>
                                         <td className="px-2 py-2 text-center">
                                             {row.bancaName !== 'Total Consolidado' && selectedYear !== 'Total Geral' && (
-                                                <button onClick={() => handleEditRecord(row)} className="text-orange-400 hover:text-orange-300 transition-colors" title="Editar">✏️</button>
+                                                <button onClick={() => handleDeleteRecord(row.id)} className="text-red-500 hover:text-red-400 transition-colors" title="Excluir">🗑️</button>
+                                            )}
+                                            {row.bancaName !== 'Total Consolidado' && selectedYear !== 'Total Geral' && (
+                                                <button onClick={() => handleEditRecord(row)} className="text-orange-400 hover:text-orange-300 transition-colors ml-2" title="Editar">✏️</button>
                                             )}
                                         </td>
                                     </tr>
                                 ))}
                                 <tr className="bg-cyan-900/40 border-t-2 border-cyan-500/80 font-black">
                                      <td className="px-2 py-3 text-white uppercase tracking-wider" colSpan="2">Total {selectedYear === 'Total Geral' ? 'Geral' : selectedYear}</td>
-                                     <td className="px-2 py-3 text-center whitespace-nowrap text-cyan-300">{formatValue(annualTotals.inicio)}</td>
-                                     <td className="px-2 py-3 text-center text-cyan-300">-</td>
+                                     
+                                     <td className="px-2 py-3 text-center whitespace-nowrap text-cyan-300">{selectedYear === 'Total Geral' ? '-' : formatValue(annualTotals.inicio)}</td>
+                                     
+                                     {/* COLUNA EXTERNO OCULTA */}
+                                     
+                                     <td className="px-2 py-3 text-center whitespace-nowrap text-cyan-300">{selectedYear === 'Total Geral' ? '-' : formatValue(annualTotals.aposta)}</td>
+                                     
                                      <td className="px-2 py-3 text-center whitespace-nowrap text-cyan-300">{formatValue(annualTotals.investimento)}</td>
-                                     <td className="px-2 py-3 text-center whitespace-nowrap text-cyan-300">{formatValue(annualTotals.aposta)}</td>
+                                     <td className="px-2 py-3 text-center whitespace-nowrap text-gray-500">{annualTotals.divisao}</td>
+                                     
+                                     <td className="px-2 py-3 text-center whitespace-nowrap text-cyan-300">
+                                         {selectedYear === 'Total Geral' 
+                                            ? formatValue(annualTotals.averageUnitValue) 
+                                            : formatValue(annualTotals.totalUnidadeValor)}
+                                     </td>
+                                     
                                      <td className={`px-2 py-3 text-center whitespace-nowrap ${getTrendClass(annualTotals.resultadoBruto)}`}>{formatValue(annualTotals.resultadoBruto)}</td>
                                      <td className={`px-2 py-3 text-center whitespace-nowrap ${getTrendClass(annualTotals.resultadoLiquido)}`}>{formatValue(annualTotals.resultadoLiquido)}</td>
-                                     <td className="px-2 py-3 text-center text-cyan-300">-</td> 
-                                     <td className="px-2 py-3 text-center text-cyan-300">-</td>
+                                     
+                                     <td className={`px-2 py-3 text-center ${getTrendClass(annualTotals.totalUnidadesBruto)}`}>{annualTotals.totalUnidadesBruto.toFixed(1)}</td>
+                                     <td className={`px-2 py-3 text-center ${getTrendClass(annualTotals.totalUnidadesLiquida)}`}>{annualTotals.totalUnidadesLiquida.toFixed(1)}</td>
+                                     
                                      <td className={`px-2 py-3 text-center ${getTrendClass(annualTotals.annualVariacaoLiquida)}`}>{formatValue(annualTotals.annualVariacaoLiquida, true)}</td>
                                      <td className="px-2 py-3 text-center whitespace-nowrap text-white bg-gray-800/50">{formatValue(annualTotals.final)}</td>
                                      <td className="px-2 py-3 text-center">-</td>
@@ -659,21 +913,126 @@ export default function BankrollManager({ user }) {
                 )}
             </div>
 
+            {/* --- TABELA DE SAQUES --- */}
+            {withdrawalsData.length > 0 && selectedYear === 'Total Geral' && (
+                <div className="mb-8 bg-[#16202a] p-4 rounded-2xl border border-gray-800 shadow-xl">
+                    <h3 className="text-lg font-bold text-gray-100 mb-4 flex items-center">
+                        <span className="bg-green-500/10 text-green-400 p-2 rounded mr-3">💸</span> Histórico de Saques
+                        <span className="text-[10px] font-normal text-gray-500 ml-2 uppercase tracking-wide">(Final Ano Anterior - Início Ano Seguinte)</span>
+                    </h3>
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full text-xs text-left text-gray-400">
+                            <thead className="text-xs text-green-400 uppercase bg-gray-900/50">
+                                <tr>
+                                    <th className="px-4 py-3">Ano Ref.</th>
+                                    {availableBancas.map(b => <th key={b} className="px-4 py-3 text-center">{b}</th>)}
+                                    <th className="px-4 py-3 text-center text-white">Total Saques</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {withdrawalsData.map((row) => (
+                                    <tr key={row.year} className="border-b border-gray-800 hover:bg-slate-800/50 transition-colors">
+                                        <td className="px-4 py-3 font-bold text-gray-300">{row.year}</td>
+                                        {availableBancas.map(b => (
+                                            <td key={b} className={`px-4 py-3 text-center ${getTrendClass(row.banks[b])}`}>
+                                                {formatValue(row.banks[b] || 0)}
+                                            </td>
+                                        ))}
+                                        <td className={`px-4 py-3 text-center font-black bg-gray-800/50 ${getTrendClass(row.total)}`}>
+                                            {formatValue(row.total)}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                            {withdrawalsTotal && (
+                                <tfoot>
+                                    <tr className="bg-green-900/30 font-black border-t-2 border-green-700">
+                                        <td className="px-4 py-3 text-white uppercase tracking-wider">Total Geral</td>
+                                        {availableBancas.map(b => (
+                                            <td key={b} className={`px-4 py-3 text-center ${getTrendClass(withdrawalsTotal[b])}`}>
+                                                {formatValue(withdrawalsTotal[b])}
+                                            </td>
+                                        ))}
+                                        <td className={`px-4 py-3 text-center text-white bg-green-900/50 ${getTrendClass(withdrawalsTotal.total)}`}>
+                                            {formatValue(withdrawalsTotal.total)}
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            )}
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            {/* --- TABELA DE INVESTIMENTOS --- */}
+            {investmentsTableData.length > 0 && selectedYear === 'Total Geral' && (
+                <div className="mb-8 bg-[#16202a] p-4 rounded-2xl border border-gray-800 shadow-xl">
+                    <h3 className="text-lg font-bold text-gray-100 mb-4 flex items-center">
+                        <span className="bg-cyan-500/10 text-cyan-400 p-2 rounded mr-3">💰</span> Histórico de Aportes
+                        <span className="text-[10px] font-normal text-gray-500 ml-2 uppercase tracking-wide">(Injeção de capital novo)</span>
+                    </h3>
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full text-xs text-left text-gray-400">
+                            <thead className="text-xs text-cyan-400 uppercase bg-gray-900/50">
+                                <tr>
+                                    <th className="px-4 py-3">Ano Ref.</th>
+                                    {availableBancas.map(b => <th key={b} className="px-4 py-3 text-center">{b}</th>)}
+                                    <th className="px-4 py-3 text-center text-white">Total Aportes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {investmentsTableData.map((row) => (
+                                    <tr key={row.year} className="border-b border-gray-800 hover:bg-slate-800/50 transition-colors">
+                                        <td className="px-4 py-3 font-bold text-gray-300">{row.year}</td>
+                                        {availableBancas.map(b => (
+                                            <td key={b} className={`px-4 py-3 text-center ${getTrendClass(row.banks[b])}`}>
+                                                {formatValue(row.banks[b] || 0)}
+                                            </td>
+                                        ))}
+                                        <td className={`px-4 py-3 text-center font-black bg-gray-800/50 ${getTrendClass(row.total)}`}>
+                                            {formatValue(row.total)}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                            {investmentsTotal && (
+                                <tfoot>
+                                    <tr className="bg-cyan-900/30 font-black border-t-2 border-cyan-700">
+                                        <td className="px-4 py-3 text-white uppercase tracking-wider">Total Geral</td>
+                                        {availableBancas.map(b => (
+                                            <td key={b} className={`px-4 py-3 text-center ${getTrendClass(investmentsTotal[b])}`}>
+                                                {formatValue(investmentsTotal[b])}
+                                            </td>
+                                        ))}
+                                        <td className={`px-4 py-3 text-center text-white bg-cyan-900/50 ${getTrendClass(investmentsTotal.total)}`}>
+                                            {formatValue(investmentsTotal.total)}
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            )}
+                        </table>
+                    </div>
+                </div>
+            )}
+
             {selectedYear !== 'Total Geral' ? (
                 <div id="manual-form" className="bg-[#16202a] p-6 rounded-2xl shadow-lg border border-gray-800 mb-8 border-l-4 border-l-cyan-600">
                     <h3 className="text-sm font-bold text-gray-300 uppercase mb-4 flex items-center">
                         <span className="bg-cyan-500/10 text-cyan-400 p-1.5 rounded mr-3">{editingRecordId ? '✏️' : '➕'}</span> 
                         {editingRecordId ? 'Editando Registro' : 'Novo Registro Mensal'}
                     </h3>
-                    <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
-                        <InputField label="Banca (Nome)" value={newMonthInputs.bancaName} onChange={(e) => setNewMonthInputs(prev => ({ ...prev, bancaName: e.target.value }))} type="text" />
-                        <div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-6">
+                        <div className="col-span-2 md:col-span-2">
+                             <InputField label="Banca (Nome)" value={newMonthInputs.bancaName} onChange={(e) => setNewMonthInputs(prev => ({ ...prev, bancaName: e.target.value }))} type="text" />
+                        </div>
+                        <div className="col-span-2 md:col-span-2">
                             <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Mês</label>
                             <select name="month" value={newMonthInputs.month} onChange={handleInputChange} className="block w-full p-3 text-sm border-gray-700 bg-gray-900 text-white rounded-lg focus:ring-2 focus:ring-cyan-500" disabled={editingRecordId !== null}>
                                 {MONTHS_NAMES.map((m, i) => <option key={i} value={i}>{m}</option>)}
                             </select>
                         </div>
                         <InputField label="Início (R$)" value={newMonthInputs.inicio} onChange={handleInputChange} name="inicio" />
+                        <InputField label="Externo (+/-)" value={newMonthInputs.externo} onChange={handleInputChange} name="externo" />
                         <InputField label="Aposta Final (R$)" value={newMonthInputs.aposta} onChange={handleInputChange} name="aposta" />
                         <InputField label="Investimento (R$)" value={newMonthInputs.investimento} onChange={handleInputChange} name="investimento" />
                         <InputField label="Divisão" value={newMonthInputs.divisao} onChange={handleInputChange} name="divisao" />
