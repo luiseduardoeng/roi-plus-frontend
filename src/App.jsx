@@ -6,6 +6,7 @@ import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, on
 import { factorial } from 'mathjs';
 import './App.css';
 import logoImg from './assets/logo.png';
+import MatchListAnalysis from './MatchListAnalysis';
 
 // --- CONSTANTES ---
 const LEAGUE_NAMES = {
@@ -582,10 +583,9 @@ function App() {
                     <div className="bg-[#16202a] p-1.5 rounded-2xl shadow-lg border border-gray-800 inline-flex whitespace-nowrap">
                         <button onClick={() => setActiveTab('matches')} className={`px-6 py-2.5 text-xs font-bold rounded-xl transition-all ${activeTab === 'matches' ? 'bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg shadow-cyan-900/40' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}>📅 Próximos Jogos</button>
                         <button onClick={() => setActiveTab('simulator')} className={`px-6 py-2.5 text-xs font-bold rounded-xl transition-all ${activeTab === 'simulator' ? 'bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg shadow-cyan-900/40' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}>⚽ Simulador</button>
+			<button onClick={() => setActiveTab('analysis')} className={`px-6 py-2.5 text-xs font-bold rounded-xl transition-all ${activeTab === 'analysis' ? 'bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg shadow-cyan-900/40' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}
+> 📊 Raio-X xG</button>
                         <button onClick={() => setActiveTab('history')} className={`px-6 py-2.5 text-xs font-bold rounded-xl transition-all ${activeTab === 'history' ? 'bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg shadow-cyan-900/40' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}>✅ Histórico</button>
-                                               
-                        {user && <button onClick={() => setActiveTab('saved')} className={`px-6 py-2.5 text-xs font-bold rounded-xl transition-all ${activeTab === 'saved' ? 'bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg shadow-cyan-900/40' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}>💾 Palpites</button>}
-
                         <button onClick={() => setActiveTab('bankroll')} className={`px-6 py-2.5 text-xs font-bold rounded-xl transition-all ${activeTab === 'bankroll' ? 'bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg shadow-cyan-900/40' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}>📈 Gestão de Banca</button>
                     </div>
                 </div>
@@ -674,7 +674,13 @@ function App() {
         
         {/* NOVO: Aba Gestão de Banca */}
         {/* Passando a prop 'user' para identificar de quem é a banca */}
-        {activeTab === 'bankroll' && <BankrollManager user={user} />}
+	{activeTab === 'bankroll' && <BankrollManager user={user} />}
+
+	{activeTab === 'analysis' && (
+    	<div className="max-w-6xl mx-auto">
+        <MatchListAnalysis matches={allMatches} />
+    	</div>
+	)}
 
       </div>
 
