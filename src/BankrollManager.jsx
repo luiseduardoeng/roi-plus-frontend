@@ -52,12 +52,9 @@ const calculateMetrics = (inputs) => {
     const safeDivisao = safeNumber(divisao);
     
     const initialInputs = {
-<<<<<<< HEAD
-        id: inputs.id,         // CORREÇÃO: Mantém o ID para conseguir excluir
-        year: inputs.year,     // CORREÇÃO: Mantém o Ano
-        userId: inputs.userId, // CORREÇÃO: Mantém a referência de usuário
-=======
->>>>>>> 7b259bf36a3609da272dc14728abd757f0fb7828
+        id: inputs.id,         
+        year: inputs.year,     
+        userId: inputs.userId, 
         month: Number(month),
         inicio: safeInicio,
         externo: safeNumber(externo),
@@ -169,10 +166,6 @@ export default function BankrollManager({ user }) {
         setNewMonthInputs(prev => ({ ...prev, [name]: newValue }));
     };
     
-<<<<<<< HEAD
-    // --- FUNÇÃO DE EXCLUIR REGISTRO ---
-=======
->>>>>>> 7b259bf36a3609da272dc14728abd757f0fb7828
     const handleDeleteRecord = async (recordId) => {
         if (!confirm("Tem certeza que deseja excluir este registro?")) return;
         try {
@@ -538,21 +531,11 @@ export default function BankrollManager({ user }) {
         }, { total: 0 });
     }, [investmentsTableData, availableBancas]);
 
-<<<<<<< HEAD
     // --- DASHBOARD GERAL (QUADRADOS) ---
     const dashboardStats = useMemo(() => {
-        // Totais de Saque e Investimento (Globais)
         const totalInvestido = investmentsTotal ? investmentsTotal.total : 0;
         const totalSaques = withdrawalsTotal ? withdrawalsTotal.total : 0;
 
-        // Saldo Atual (Última banca registrada de cada banca ativa)
-=======
-    // --- DASHBOARD GERAL (4 QUADRADOS) ---
-    const dashboardStats = useMemo(() => {
-        const totalInvestido = investmentsTotal ? investmentsTotal.total : 0;
-        const totalSaques = withdrawalsTotal ? withdrawalsTotal.total : 0;
-
->>>>>>> 7b259bf36a3609da272dc14728abd757f0fb7828
         let currentEquity = 0;
         const years = Object.keys(historicalData).sort();
         if (years.length > 0) {
@@ -569,28 +552,15 @@ export default function BankrollManager({ user }) {
             });
         }
 
-<<<<<<< HEAD
-        // ROI = ((Saldo Atual + Saques - Investimento) / Investimento) * 100
         const profit = (currentEquity + totalSaques) - totalInvestido;
         const roi = totalInvestido > 0 ? (profit / totalInvestido) : 0;
-=======
-        // FÓRMULA ATUALIZADA: ((Saldo + Saques) / Investido) 
-        // OBS: Removemos o *100 daqui porque o formatValue já faz isso quando isPercentage=true
-        const rawReturn = currentEquity + totalSaques;
-        const roi = totalInvestido > 0 ? (rawReturn / totalInvestido) : 0;
->>>>>>> 7b259bf36a3609da272dc14728abd757f0fb7828
 
         return {
             totalInvestido,
             totalSaques,
-<<<<<<< HEAD
-=======
-            currentEquity, // Saldo Atual das Bancas
->>>>>>> 7b259bf36a3609da272dc14728abd757f0fb7828
             roi
         };
     }, [investmentsTotal, withdrawalsTotal, historicalData, availableBancas]);
-
 
     const filteredData = useMemo(() => {
         if (selectedYear === 'Total Geral') {
@@ -615,7 +585,6 @@ export default function BankrollManager({ user }) {
 
                 let totalInicioAno = 0;
                 let lastFinal = 0;
-                let lastAposta = 0;
                 let lastExterno = 0; 
                 let lastDivisao = 0;
                 
@@ -626,43 +595,21 @@ export default function BankrollManager({ user }) {
                     const last = [...recs].reverse().find(r => r.finalBanca > 0);
                     if (last) {
                         lastFinal += last.finalBanca;
-                        lastAposta += last.aposta;
                         lastExterno += last.externo;
                         lastDivisao = last.divisao; 
                     }
                 });
 
+                // --- CORREÇÃO DA APOSTA NA LINHA DOS ANOS (TOTAL GERAL) ---
+                const apostaCalculada = totalInicioAno + totalResBruto;
+
                 const variacaoLiquida = totalInicioAno > 0 ? totalResLiquido / totalInicioAno : 0;
-                
-                const yearUnidadeValor = lastDivisao > 0 ? lastAposta / lastDivisao : 0;
+                const yearUnidadeValor = lastDivisao > 0 ? apostaCalculada / lastDivisao : 0;
                 
                 const totalUnidadesBruto = yearUnidadeValor > 0 ? totalResBruto / yearUnidadeValor : 0;
                 const totalUnidadesLiq = yearUnidadeValor > 0 ? totalResLiquido / yearUnidadeValor : 0;
 
                 return {
-<<<<<<< HEAD
-    id: `summary-${year}`,
-    isYearRow: true,
-    month: -1,
-    displayLabel: year,
-    bancaName: selectedBanca === 'Todas as Bancas' ? 'Múltiplas' : selectedBanca,
-    inicio: totalInicioAno,
-    externo: lastExterno,
-    divisao: lastDivisao,
-    
-    // ALTERAÇÃO AQUI: Aposta do ano = Início do ano + Lucro/Prejuízo Bruto do ano
-    aposta: totalInicioAno + totalResBruto, 
-    
-    investimento: totalInvestimento,
-    resultadoBruto: totalResBruto,
-    resultadoLiquido: totalResLiquido,
-    finalBanca: lastFinal,
-    unidadeValor: yearUnidadeValor, 
-    unidadesBruto: totalUnidadesBruto,
-    unidadesLiquida: totalUnidadesLiq,
-    variacaoLiquida: variacaoLiquida
-};
-=======
                     id: `summary-${year}`,
                     isYearRow: true,
                     month: -1,
@@ -671,7 +618,7 @@ export default function BankrollManager({ user }) {
                     inicio: totalInicioAno,
                     externo: lastExterno,
                     divisao: lastDivisao,
-                    aposta: lastAposta,
+                    aposta: apostaCalculada, 
                     investimento: totalInvestimento,
                     resultadoBruto: totalResBruto,
                     resultadoLiquido: totalResLiquido,
@@ -681,7 +628,6 @@ export default function BankrollManager({ user }) {
                     unidadesLiquida: totalUnidadesLiq,
                     variacaoLiquida: variacaoLiquida
                 };
->>>>>>> 7b259bf36a3609da272dc14728abd757f0fb7828
             }).filter(Boolean);
         }
 
@@ -735,7 +681,6 @@ export default function BankrollManager({ user }) {
     const annualTotals = useMemo(() => {
         if (filteredData.length === 0) return { inicio: 0, externo: 0, aposta: 0, investimento: 0, resultadoBruto: 0, resultadoLiquido: 0, final: 0, divisao: 0 };
         
-        // Investimento total e resultados acumulados da visualização atual
         const totals = filteredData.reduce((acc, current) => {
             acc.investimento += current.investimento;
             acc.resultadoBruto += current.resultadoBruto;
@@ -756,80 +701,47 @@ export default function BankrollManager({ user }) {
         }, {});
 
         let sumFinal = 0;
-        let sumAposta = 0;
         let sumInicio = 0;
         let sumExterno = 0;
         let lastDivisao = 0;
 
         Object.values(recordsByBank).forEach(bankRecords => {
-            // Ordena cronologicamente por mês
             bankRecords.sort((a, b) => {
                 if (Number(a.year) !== Number(b.year)) return Number(a.year) - Number(b.year);
                 return a.month - b.month;
             });
-<<<<<<< HEAD
-            
-            const lastActiveRecord = [...bankRecords].reverse().find(r => r.finalBanca > 0) || bankRecords[bankRecords.length - 1];
-            if (lastActiveRecord) {
-                sumFinal += lastActiveRecord.finalBanca;
-                sumAposta += lastActiveRecord.aposta; // Utilizado apenas para Total Geral
-=======
-            if (bankRecords.length > 0) {
-                const first = bankRecords.find(r => r.inicio > 0) || bankRecords[0];
-                if (first) sumInicio += first.inicio;
-            }
             const lastActiveRecord = [...bankRecords].reverse().find(r => r.finalBanca > 0);
             if (lastActiveRecord) {
                 sumFinal += lastActiveRecord.finalBanca;
-                sumAposta += lastActiveRecord.aposta;
->>>>>>> 7b259bf36a3609da272dc14728abd757f0fb7828
                 sumExterno += lastActiveRecord.externo;
                 lastDivisao = lastActiveRecord.divisao; 
             }
         });
 
-<<<<<<< HEAD
-        // --- LÓGICA ESPECÍFICA QUANDO UM ANO ESTÁ SELECIONADO ---
         if (selectedYear !== 'Total Geral') {
              sumInicio = 0;
              Object.values(recordsByBank).forEach(bankRecords => {
-                // Pega o início do primeiro mês ativo no ano selecionado
-=======
-        if (selectedYear !== 'Total Geral') {
-             sumInicio = 0;
-             Object.values(recordsByBank).forEach(bankRecords => {
->>>>>>> 7b259bf36a3609da272dc14728abd757f0fb7828
                 const firstOfYear = bankRecords.find(r => r.inicio > 0) || bankRecords[0];
                 if (firstOfYear) sumInicio += firstOfYear.inicio;
              });
-             
-             // 1. INÍCIO = Início do primeiro mês do ano
              totals.inicio = sumInicio;
-             // 2. APOSTA = Início do primeiro mês + Resultado Bruto
-             totals.aposta = totals.inicio + totals.resultadoBruto;
-             
         } else {
-             // Lógica padrão se estiver visualizando "Total Geral"
              Object.values(recordsByBank).forEach(bankRecords => {
                 const firstOverall = bankRecords.find(r => r.inicio > 0) || bankRecords[0];
                 if (firstOverall) sumInicio += firstOverall.inicio;
              });
              totals.inicio = sumInicio;
-             totals.aposta = sumAposta; 
         }
         
+        // --- REGRA UNIVERSAL DA APOSTA ---
+        totals.aposta = totals.inicio + totals.resultadoBruto;
+        
         totals.final = sumFinal;
-<<<<<<< HEAD
-=======
-        totals.aposta = sumAposta;
->>>>>>> 7b259bf36a3609da272dc14728abd757f0fb7828
         totals.externo = sumExterno;
         totals.divisao = lastDivisao;
 
-        // --- CÁLCULOS ESPECÍFICOS PARA O TOTAL ---
         const totalUnidadeValor = totals.divisao > 0 ? totals.aposta / totals.divisao : 0;
         
-        // --- MÉDIA DA UNIDADE PARA O TOTAL GERAL ---
         let averageUnitValue = 0;
         if (selectedYear === 'Total Geral') {
             const validUnitRows = filteredData.filter(r => r.unidadeValor > 0);
@@ -892,25 +804,12 @@ export default function BankrollManager({ user }) {
                 </div>
             </div>
 
-<<<<<<< HEAD
             {/* --- DASHBOARD (3 QUADRADOS) --- */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-=======
-            {/* --- DASHBOARD (4 QUADRADOS) --- */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
->>>>>>> 7b259bf36a3609da272dc14728abd757f0fb7828
                 <div className="bg-[#16202a] p-4 rounded-xl border border-gray-800 shadow-lg flex flex-col items-center justify-center">
                     <span className="text-xs text-gray-500 uppercase tracking-widest font-bold mb-1">Total Investido</span>
                     <span className="text-2xl font-black text-cyan-400">{formatValue(dashboardStats.totalInvestido)}</span>
                 </div>
-<<<<<<< HEAD
-=======
-                {/* NOVO QUADRADO: SALDO BANCAS */}
-                <div className="bg-[#16202a] p-4 rounded-xl border border-gray-800 shadow-lg flex flex-col items-center justify-center">
-                    <span className="text-xs text-gray-500 uppercase tracking-widest font-bold mb-1">Saldo Bancas</span>
-                    <span className="text-2xl font-black text-indigo-400">{formatValue(dashboardStats.currentEquity)}</span>
-                </div>
->>>>>>> 7b259bf36a3609da272dc14728abd757f0fb7828
                 <div className="bg-[#16202a] p-4 rounded-xl border border-gray-800 shadow-lg flex flex-col items-center justify-center">
                     <span className="text-xs text-gray-500 uppercase tracking-widest font-bold mb-1">Total Saques</span>
                     <span className="text-2xl font-black text-green-400">{formatValue(dashboardStats.totalSaques)}</span>
@@ -932,7 +831,6 @@ export default function BankrollManager({ user }) {
                                     <th className="px-2 py-3">{selectedYear === 'Total Geral' ? 'Ano' : 'Mês'}</th>
                                     <th className="px-2 py-3">Banca</th> 
                                     <th className="px-2 py-3 text-center whitespace-nowrap">Início</th>
-                                    {/* COLUNA EXTERNO OCULTA */}
                                     <th className="px-2 py-3 text-center whitespace-nowrap">Aposta</th>
                                     <th className="px-2 py-3 text-center whitespace-nowrap">Inv.</th>
                                     <th className="px-2 py-3 text-center whitespace-nowrap text-gray-500">Divisão</th>
@@ -956,7 +854,6 @@ export default function BankrollManager({ user }) {
                                         <td className={`px-2 py-2 whitespace-nowrap max-w-[120px] truncate ${row.bancaName === 'Total Consolidado' ? 'font-black text-orange-400 bg-gray-800' : 'text-cyan-400'}`}>{row.bancaName}</td> 
                                         <td className="px-2 py-2 text-center whitespace-nowrap">{formatValue(row.inicio)}</td>
                                         
-                                        {/* COLUNA EXTERNO OCULTA */}
                                         <td className="px-2 py-2 text-center whitespace-nowrap">{formatValue(row.aposta)}</td>
                                         <td className="px-2 py-2 text-center whitespace-nowrap">{formatValue(row.investimento)}</td>
                                         <td className="px-2 py-2 text-center whitespace-nowrap text-gray-500">{row.divisao}</td>
@@ -982,8 +879,6 @@ export default function BankrollManager({ user }) {
                                      <td className="px-2 py-3 text-white uppercase tracking-wider" colSpan="2">Total {selectedYear === 'Total Geral' ? 'Geral' : selectedYear}</td>
                                      
                                      <td className="px-2 py-3 text-center whitespace-nowrap text-cyan-300">{selectedYear === 'Total Geral' ? '-' : formatValue(annualTotals.inicio)}</td>
-                                     
-                                     {/* COLUNA EXTERNO OCULTA */}
                                      
                                      <td className="px-2 py-3 text-center whitespace-nowrap text-cyan-300">{selectedYear === 'Total Geral' ? '-' : formatValue(annualTotals.aposta)}</td>
                                      
