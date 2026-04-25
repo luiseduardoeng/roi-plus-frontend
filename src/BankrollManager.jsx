@@ -52,9 +52,12 @@ const calculateMetrics = (inputs) => {
     const safeDivisao = safeNumber(divisao);
     
     const initialInputs = {
+<<<<<<< HEAD
         id: inputs.id,         // CORREÇÃO: Mantém o ID para conseguir excluir
         year: inputs.year,     // CORREÇÃO: Mantém o Ano
         userId: inputs.userId, // CORREÇÃO: Mantém a referência de usuário
+=======
+>>>>>>> 7b259bf36a3609da272dc14728abd757f0fb7828
         month: Number(month),
         inicio: safeInicio,
         externo: safeNumber(externo),
@@ -166,7 +169,10 @@ export default function BankrollManager({ user }) {
         setNewMonthInputs(prev => ({ ...prev, [name]: newValue }));
     };
     
+<<<<<<< HEAD
     // --- FUNÇÃO DE EXCLUIR REGISTRO ---
+=======
+>>>>>>> 7b259bf36a3609da272dc14728abd757f0fb7828
     const handleDeleteRecord = async (recordId) => {
         if (!confirm("Tem certeza que deseja excluir este registro?")) return;
         try {
@@ -532,6 +538,7 @@ export default function BankrollManager({ user }) {
         }, { total: 0 });
     }, [investmentsTableData, availableBancas]);
 
+<<<<<<< HEAD
     // --- DASHBOARD GERAL (QUADRADOS) ---
     const dashboardStats = useMemo(() => {
         // Totais de Saque e Investimento (Globais)
@@ -539,6 +546,13 @@ export default function BankrollManager({ user }) {
         const totalSaques = withdrawalsTotal ? withdrawalsTotal.total : 0;
 
         // Saldo Atual (Última banca registrada de cada banca ativa)
+=======
+    // --- DASHBOARD GERAL (4 QUADRADOS) ---
+    const dashboardStats = useMemo(() => {
+        const totalInvestido = investmentsTotal ? investmentsTotal.total : 0;
+        const totalSaques = withdrawalsTotal ? withdrawalsTotal.total : 0;
+
+>>>>>>> 7b259bf36a3609da272dc14728abd757f0fb7828
         let currentEquity = 0;
         const years = Object.keys(historicalData).sort();
         if (years.length > 0) {
@@ -555,13 +569,24 @@ export default function BankrollManager({ user }) {
             });
         }
 
+<<<<<<< HEAD
         // ROI = ((Saldo Atual + Saques - Investimento) / Investimento) * 100
         const profit = (currentEquity + totalSaques) - totalInvestido;
         const roi = totalInvestido > 0 ? (profit / totalInvestido) : 0;
+=======
+        // FÓRMULA ATUALIZADA: ((Saldo + Saques) / Investido) 
+        // OBS: Removemos o *100 daqui porque o formatValue já faz isso quando isPercentage=true
+        const rawReturn = currentEquity + totalSaques;
+        const roi = totalInvestido > 0 ? (rawReturn / totalInvestido) : 0;
+>>>>>>> 7b259bf36a3609da272dc14728abd757f0fb7828
 
         return {
             totalInvestido,
             totalSaques,
+<<<<<<< HEAD
+=======
+            currentEquity, // Saldo Atual das Bancas
+>>>>>>> 7b259bf36a3609da272dc14728abd757f0fb7828
             roi
         };
     }, [investmentsTotal, withdrawalsTotal, historicalData, availableBancas]);
@@ -615,6 +640,7 @@ export default function BankrollManager({ user }) {
                 const totalUnidadesLiq = yearUnidadeValor > 0 ? totalResLiquido / yearUnidadeValor : 0;
 
                 return {
+<<<<<<< HEAD
     id: `summary-${year}`,
     isYearRow: true,
     month: -1,
@@ -636,6 +662,26 @@ export default function BankrollManager({ user }) {
     unidadesLiquida: totalUnidadesLiq,
     variacaoLiquida: variacaoLiquida
 };
+=======
+                    id: `summary-${year}`,
+                    isYearRow: true,
+                    month: -1,
+                    displayLabel: year,
+                    bancaName: selectedBanca === 'Todas as Bancas' ? 'Múltiplas' : selectedBanca,
+                    inicio: totalInicioAno,
+                    externo: lastExterno,
+                    divisao: lastDivisao,
+                    aposta: lastAposta,
+                    investimento: totalInvestimento,
+                    resultadoBruto: totalResBruto,
+                    resultadoLiquido: totalResLiquido,
+                    finalBanca: lastFinal,
+                    unidadeValor: yearUnidadeValor, 
+                    unidadesBruto: totalUnidadesBruto,
+                    unidadesLiquida: totalUnidadesLiq,
+                    variacaoLiquida: variacaoLiquida
+                };
+>>>>>>> 7b259bf36a3609da272dc14728abd757f0fb7828
             }).filter(Boolean);
         }
 
@@ -721,21 +767,38 @@ export default function BankrollManager({ user }) {
                 if (Number(a.year) !== Number(b.year)) return Number(a.year) - Number(b.year);
                 return a.month - b.month;
             });
+<<<<<<< HEAD
             
             const lastActiveRecord = [...bankRecords].reverse().find(r => r.finalBanca > 0) || bankRecords[bankRecords.length - 1];
             if (lastActiveRecord) {
                 sumFinal += lastActiveRecord.finalBanca;
                 sumAposta += lastActiveRecord.aposta; // Utilizado apenas para Total Geral
+=======
+            if (bankRecords.length > 0) {
+                const first = bankRecords.find(r => r.inicio > 0) || bankRecords[0];
+                if (first) sumInicio += first.inicio;
+            }
+            const lastActiveRecord = [...bankRecords].reverse().find(r => r.finalBanca > 0);
+            if (lastActiveRecord) {
+                sumFinal += lastActiveRecord.finalBanca;
+                sumAposta += lastActiveRecord.aposta;
+>>>>>>> 7b259bf36a3609da272dc14728abd757f0fb7828
                 sumExterno += lastActiveRecord.externo;
                 lastDivisao = lastActiveRecord.divisao; 
             }
         });
 
+<<<<<<< HEAD
         // --- LÓGICA ESPECÍFICA QUANDO UM ANO ESTÁ SELECIONADO ---
         if (selectedYear !== 'Total Geral') {
              sumInicio = 0;
              Object.values(recordsByBank).forEach(bankRecords => {
                 // Pega o início do primeiro mês ativo no ano selecionado
+=======
+        if (selectedYear !== 'Total Geral') {
+             sumInicio = 0;
+             Object.values(recordsByBank).forEach(bankRecords => {
+>>>>>>> 7b259bf36a3609da272dc14728abd757f0fb7828
                 const firstOfYear = bankRecords.find(r => r.inicio > 0) || bankRecords[0];
                 if (firstOfYear) sumInicio += firstOfYear.inicio;
              });
@@ -756,6 +819,10 @@ export default function BankrollManager({ user }) {
         }
         
         totals.final = sumFinal;
+<<<<<<< HEAD
+=======
+        totals.aposta = sumAposta;
+>>>>>>> 7b259bf36a3609da272dc14728abd757f0fb7828
         totals.externo = sumExterno;
         totals.divisao = lastDivisao;
 
@@ -825,12 +892,25 @@ export default function BankrollManager({ user }) {
                 </div>
             </div>
 
+<<<<<<< HEAD
             {/* --- DASHBOARD (3 QUADRADOS) --- */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+=======
+            {/* --- DASHBOARD (4 QUADRADOS) --- */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+>>>>>>> 7b259bf36a3609da272dc14728abd757f0fb7828
                 <div className="bg-[#16202a] p-4 rounded-xl border border-gray-800 shadow-lg flex flex-col items-center justify-center">
                     <span className="text-xs text-gray-500 uppercase tracking-widest font-bold mb-1">Total Investido</span>
                     <span className="text-2xl font-black text-cyan-400">{formatValue(dashboardStats.totalInvestido)}</span>
                 </div>
+<<<<<<< HEAD
+=======
+                {/* NOVO QUADRADO: SALDO BANCAS */}
+                <div className="bg-[#16202a] p-4 rounded-xl border border-gray-800 shadow-lg flex flex-col items-center justify-center">
+                    <span className="text-xs text-gray-500 uppercase tracking-widest font-bold mb-1">Saldo Bancas</span>
+                    <span className="text-2xl font-black text-indigo-400">{formatValue(dashboardStats.currentEquity)}</span>
+                </div>
+>>>>>>> 7b259bf36a3609da272dc14728abd757f0fb7828
                 <div className="bg-[#16202a] p-4 rounded-xl border border-gray-800 shadow-lg flex flex-col items-center justify-center">
                     <span className="text-xs text-gray-500 uppercase tracking-widest font-bold mb-1">Total Saques</span>
                     <span className="text-2xl font-black text-green-400">{formatValue(dashboardStats.totalSaques)}</span>
