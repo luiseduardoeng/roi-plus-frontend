@@ -47,21 +47,21 @@ const CSV_EXAMPLE_ROW = [
 ];
 
 const calculateMetrics = (inputs) => {
-    const { month, inicio, externo, aposta, investimento, divisao } = inputs;
+    // Extraímos os campos matemáticos e jogamos todo o resto (id, year, userId) na variável "rest"
+    const { month, inicio, externo, aposta, investimento, divisao, bancaName, ...rest } = inputs;
+    
     const safeInicio = safeNumber(inicio);
     const safeDivisao = safeNumber(divisao);
     
     const initialInputs = {
-        id: inputs.id,         
-        year: inputs.year,     
-        userId: inputs.userId, 
+        ...rest, // Repassa os IDs intactos se existirem, sem criar "undefined"
         month: Number(month),
         inicio: safeInicio,
         externo: safeNumber(externo),
         aposta: safeNumber(aposta),
         investimento: safeNumber(investimento),
         divisao: safeDivisao,
-        bancaName: inputs.bancaName || 'Banca Padrão',
+        bancaName: bancaName || 'Banca Padrão',
     };
 
     const resultadoBruto = initialInputs.aposta + initialInputs.externo - safeInicio;
