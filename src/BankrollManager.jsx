@@ -14,7 +14,6 @@ import {
 } from 'firebase/firestore';
 
 // --- Funções Auxiliares ---
-
 const safeNumber = (value) => {
     if (typeof value === 'number') return value;
     const cleanValue = String(value).replace(',', '.');
@@ -47,14 +46,12 @@ const CSV_EXAMPLE_ROW = [
 ];
 
 const calculateMetrics = (inputs) => {
-    // Extraímos os campos matemáticos e jogamos todo o resto (id, year, userId) na variável "rest"
     const { month, inicio, externo, aposta, investimento, divisao, bancaName, ...rest } = inputs;
-    
     const safeInicio = safeNumber(inicio);
     const safeDivisao = safeNumber(divisao);
     
     const initialInputs = {
-        ...rest, // Repassa os IDs intactos se existirem, sem criar "undefined"
+        ...rest,
         month: Number(month),
         inicio: safeInicio,
         externo: safeNumber(externo),
@@ -416,11 +413,64 @@ export default function BankrollManager({ user }) {
         const names = [...new Set(allRecords.map(d => d.bancaName).filter(name => name))];
         return names.sort();
     }, [historicalData]);
-    
-    // --- CÁLCULO DE SAQUES (ANO A ANO: Final Prev - Inicio Curr) ---
+
+    const handleManualAdjustment = async (year, banca, type, currentValue) => {
+        const label = type === 'saque' ? 'Saque' : 'Aporte';
+        const newValueStr = prompt(`Editar ${label} de ${banca} em ${year}:\n(Valor atual calculado: R$ ${currentValue.toFixed(2)})`, currentValue.toFixed(2));
+        
+        if (newValueStr === null) return;
+        const newValue = safeNumber(newValueStr);
+
+        const targetYear = type === 'saque' ? (parseInt(year) + 1).toString() : year;
+        const prevYear = (parseInt(targetYear) - 1).toString();
+
+        const targetRecords = historicalData[targetYear]?.filter(r => r.bancaName === banca) || [];
+        const prevRecords = historicalData[prevYear]?.filter(r => r.bancaName === banca) || [];
+
+        if (targetRecords.length === 0 && type === 'saque') {
+            alert(`Erro: Para ajustar um saque feito em ${year}, você precisa ter criado o primeiro registro de ${targetYear} desta banca.`);
+            return;
+        }
+
+        if (targetRecords.length === 0 && type === 'aporte') {
+            alert(`Erro: Nenhum registro encontrado em ${targetYear}.`);
+            return;
+        }
+
+        targetRecords.sort((a,b) => a.month - b.month);
+        const firstRecord = targetRecords[0];
+        let newInicio = 0;
+
+        if (prevRecords.length > 0) {
+            prevRecords.sort((a,b) => a.month - b.month);
+            const inicioPrev = prevRecords.find(r => r.inicio > 0)?.inicio || prevRecords[0].inicio;
+            const totalLiquidoPrev = prevRecords.reduce((sum, r) => sum + r.resultadoLiquido, 0);
+            const theoreticalFinalPrev = inicioPrev + totalLiquidoPrev;
+
+            if (type === 'saque') {
+                newInicio = theoreticalFinalPrev - newValue;
+            } else {
+                newInicio = theoreticalFinalPrev + newValue;
+            }
+        } else {
+            if (type === 'aporte') newInicio = newValue;
+            else { alert("Não é possível registrar saque no primeiro ano da banca."); return; }
+        }
+
+        try {
+            const docRef = doc(db, "bankroll_records", firstRecord.id);
+            const updatedMetrics = calculateMetrics({ ...firstRecord, inicio: newInicio });
+            await updateDoc(docRef, updatedMetrics);
+            alert(`${label} atualizado com sucesso! O sistema ajustou o Início de ${targetYear} para R$ ${newInicio.toFixed(2)}.`);
+        } catch (error) {
+            console.error("Erro ao ajustar:", error);
+            alert("Erro ao atualizar no banco de dados.");
+        }
+    };
+
+    // --- CÁLCULO DE SAQUES COM TOTAL GLOBAL ---
     const withdrawalsData = useMemo(() => {
         const years = Object.keys(historicalData).sort();
-        const banks = availableBancas;
         const result = [];
 
         for (let i = 0; i < years.length - 1; i++) {
@@ -428,30 +478,47 @@ export default function BankrollManager({ user }) {
             const nextYear = years[i+1];
             const rowData = { year: currentYear, banks: {}, total: 0 };
 
-            const currentYearRecords = historicalData[currentYear] || [];
-            const nextYearRecords = historicalData[nextYear] || [];
+            let globalFinalAtual = 0;
+            let globalInicioProx = 0;
 
-            banks.forEach(bank => {
-                const bankRecordsCurr = currentYearRecords.filter(r => r.bancaName === bank);
-                bankRecordsCurr.sort((a,b) => a.month - b.month);
-                const lastRecord = bankRecordsCurr[bankRecordsCurr.length - 1];
-                const finalVal = lastRecord ? lastRecord.finalBanca : 0;
+            availableBancas.forEach(bank => {
+                const currentYearRecords = (historicalData[currentYear] || []).filter(r => r.bancaName === bank);
+                const nextYearRecords = (historicalData[nextYear] || []).filter(r => r.bancaName === bank);
 
-                const bankRecordsNext = nextYearRecords.filter(r => r.bancaName === bank);
-                bankRecordsNext.sort((a,b) => a.month - b.month);
-                const firstRecord = bankRecordsNext[0]; 
-                const startVal = firstRecord ? firstRecord.inicio : 0;
-
-                // SAQUE: FINAL ANO ANTERIOR - INICIO ANO SEGUINTE (POSITIVO)
-                let diff = 0;
-                if (lastRecord && firstRecord) {
-                    const rawDiff = finalVal - startVal;
-                    if (rawDiff > 0) diff = rawDiff;
+                let theoreticalFinal = 0;
+                if (currentYearRecords.length > 0) {
+                    currentYearRecords.sort((a,b) => a.month - b.month);
+                    const inicioAtual = currentYearRecords.find(r => r.inicio > 0)?.inicio || currentYearRecords[0].inicio;
+                    theoreticalFinal = inicioAtual + currentYearRecords.reduce((sum, r) => sum + r.resultadoLiquido, 0);
+                    globalFinalAtual += theoreticalFinal;
                 }
 
-                rowData.banks[bank] = diff;
-                rowData.total += diff;
+                let inicioProx = 0;
+                if (nextYearRecords.length > 0) {
+                    nextYearRecords.sort((a,b) => a.month - b.month);
+                    inicioProx = nextYearRecords.find(r => r.inicio > 0)?.inicio || nextYearRecords[0].inicio;
+                    globalInicioProx += inicioProx;
+                }
+
+                if (currentYearRecords.length > 0 && nextYearRecords.length > 0) {
+                    const diff = theoreticalFinal - inicioProx;
+                    if (diff > 0) {
+                        rowData.banks[bank] = {
+                            value: diff,
+                            tooltip: `CÁLCULO INDIVIDUAL:\nFinal Teórico ${currentYear}: R$ ${theoreticalFinal.toFixed(2)}\nInício Registrado ${nextYear}: R$ ${inicioProx.toFixed(2)}\nSaque Calculado: R$ ${diff.toFixed(2)}`
+                        };
+                    } else {
+                        rowData.banks[bank] = { value: 0, tooltip: "Nenhum saque matemático detectado para esta banca." };
+                    }
+                } else {
+                    rowData.banks[bank] = { value: 0, tooltip: "Faltam dados entre os anos para calcular." };
+                }
             });
+
+            // CÁLCULO DO TOTAL GLOBAL DA LINHA (Abate transferências entre bancas)
+            const diffGlobal = globalFinalAtual - globalInicioProx;
+            rowData.total = diffGlobal > 0 ? diffGlobal : 0;
+
             result.push(rowData);
         }
         return result;
@@ -461,17 +528,16 @@ export default function BankrollManager({ user }) {
         if (withdrawalsData.length === 0) return null;
         return withdrawalsData.reduce((acc, row) => {
             availableBancas.forEach(banca => {
-                acc[banca] = (acc[banca] || 0) + (row.banks[banca] || 0);
+                acc[banca] = (acc[banca] || 0) + (row.banks[banca]?.value || 0);
             });
             acc.total += row.total;
             return acc;
         }, { total: 0 });
     }, [withdrawalsData, availableBancas]);
 
-    // --- CÁLCULO DE INVESTIMENTOS ---
+    // --- CÁLCULO DE APORTES COM TOTAL GLOBAL ---
     const investmentsTableData = useMemo(() => {
         const years = Object.keys(historicalData).sort();
-        const banks = availableBancas;
         const result = [];
 
         for (let i = 0; i < years.length; i++) {
@@ -479,42 +545,54 @@ export default function BankrollManager({ user }) {
             const prevYear = i > 0 ? years[i-1] : null;
             const rowData = { year: currentYear, banks: {}, total: 0 };
 
-            const currentYearRecords = historicalData[currentYear] || [];
-            const prevYearRecords = prevYear ? (historicalData[prevYear] || []) : [];
+            let globalInicioAtual = 0;
+            let globalFinalPrev = 0;
 
-            banks.forEach(bank => {
-                const bankRecordsCurr = currentYearRecords.filter(r => r.bancaName === bank);
-                bankRecordsCurr.sort((a,b) => a.month - b.month);
-                const firstRecord = bankRecordsCurr[0];
-                const startVal = firstRecord ? firstRecord.inicio : 0;
+            availableBancas.forEach(bank => {
+                const currentYearRecords = (historicalData[currentYear] || []).filter(r => r.bancaName === bank);
+                let invData = { value: 0, tooltip: "" };
 
-                let finalVal = 0;
-                let hasPrevRecord = false;
-                
-                if (prevYear) {
-                    const bankRecordsPrev = prevYearRecords.filter(r => r.bancaName === bank);
-                    bankRecordsPrev.sort((a,b) => a.month - b.month);
-                    const lastRecord = bankRecordsPrev[bankRecordsPrev.length - 1];
-                    if (lastRecord) {
-                        finalVal = lastRecord.finalBanca;
-                        hasPrevRecord = true;
-                    }
-                }
+                if (currentYearRecords.length > 0) {
+                    currentYearRecords.sort((a,b) => a.month - b.month);
+                    const inicioAtual = currentYearRecords.find(r => r.inicio > 0)?.inicio || currentYearRecords[0].inicio;
+                    globalInicioAtual += inicioAtual;
 
-                let investment = 0;
-                if (firstRecord) {
-                    if (!hasPrevRecord) {
-                        investment = startVal;
+                    if (prevYear) {
+                        const prevYearRecords = (historicalData[prevYear] || []).filter(r => r.bancaName === bank);
+                        if (prevYearRecords.length > 0) {
+                            prevYearRecords.sort((a,b) => a.month - b.month);
+                            const inicioPrev = prevYearRecords.find(r => r.inicio > 0)?.inicio || prevYearRecords[0].inicio;
+                            const theoreticalFinalPrev = inicioPrev + prevYearRecords.reduce((sum, r) => sum + r.resultadoLiquido, 0);
+                            globalFinalPrev += theoreticalFinalPrev;
+
+                            const diff = inicioAtual - theoreticalFinalPrev;
+                            if (diff > 0) {
+                                invData = {
+                                    value: diff,
+                                    tooltip: `CÁLCULO INDIVIDUAL:\nInício Registrado ${currentYear}: R$ ${inicioAtual.toFixed(2)}\nFinal Teórico ${prevYear}: R$ ${theoreticalFinalPrev.toFixed(2)}\nAporte Calculado: R$ ${diff.toFixed(2)}`
+                                };
+                            } else {
+                                invData = { value: 0, tooltip: "Nenhum aporte matemático detectado para esta banca." };
+                            }
+                        } else {
+                            invData = { value: inicioAtual, tooltip: `Primeiro ano desta banca. Aporte inicial: R$ ${inicioAtual.toFixed(2)}` };
+                        }
                     } else {
-                        const diff = startVal - finalVal;
-                        if (diff > 0) investment = diff;
+                        invData = { value: inicioAtual, tooltip: `Primeiro registro do sistema. Aporte inicial: R$ ${inicioAtual.toFixed(2)}` };
                     }
                 }
 
-                rowData.banks[bank] = investment;
-                rowData.total += investment;
+                rowData.banks[bank] = invData;
             });
-            
+
+            // CÁLCULO DO TOTAL GLOBAL DA LINHA (Abate transferências entre bancas)
+            if (prevYear) {
+                const diffGlobal = globalInicioAtual - globalFinalPrev;
+                rowData.total = diffGlobal > 0 ? diffGlobal : 0;
+            } else {
+                rowData.total = globalInicioAtual;
+            }
+
             result.push(rowData);
         }
         return result;
@@ -524,14 +602,13 @@ export default function BankrollManager({ user }) {
         if (investmentsTableData.length === 0) return null;
         return investmentsTableData.reduce((acc, row) => {
             availableBancas.forEach(banca => {
-                acc[banca] = (acc[banca] || 0) + (row.banks[banca] || 0);
+                acc[banca] = (acc[banca] || 0) + (row.banks[banca]?.value || 0);
             });
             acc.total += row.total;
             return acc;
         }, { total: 0 });
     }, [investmentsTableData, availableBancas]);
 
-    // --- DASHBOARD GERAL (QUADRADOS) ---
     const dashboardStats = useMemo(() => {
         const totalInvestido = investmentsTotal ? investmentsTotal.total : 0;
         const totalSaques = withdrawalsTotal ? withdrawalsTotal.total : 0;
@@ -544,10 +621,11 @@ export default function BankrollManager({ user }) {
             
             availableBancas.forEach(bank => {
                 const bankRecords = lastYearRecords.filter(r => r.bancaName === bank);
-                bankRecords.sort((a, b) => a.month - b.month);
-                const lastRecord = bankRecords[bankRecords.length - 1];
-                if (lastRecord) {
-                    currentEquity += lastRecord.finalBanca;
+                if (bankRecords.length > 0) {
+                    bankRecords.sort((a, b) => a.month - b.month);
+                    const inicioAtual = bankRecords.find(r => r.inicio > 0)?.inicio || bankRecords[0].inicio;
+                    const totalLiquidoAtual = bankRecords.reduce((sum, r) => sum + r.resultadoLiquido, 0);
+                    currentEquity += (inicioAtual + totalLiquidoAtual);
                 }
             });
         }
@@ -555,11 +633,7 @@ export default function BankrollManager({ user }) {
         const profit = (currentEquity + totalSaques) - totalInvestido;
         const roi = totalInvestido > 0 ? (profit / totalInvestido) : 0;
 
-        return {
-            totalInvestido,
-            totalSaques,
-            roi
-        };
+        return { totalInvestido, totalSaques, roi };
     }, [investmentsTotal, withdrawalsTotal, historicalData, availableBancas]);
 
     const filteredData = useMemo(() => {
@@ -584,7 +658,6 @@ export default function BankrollManager({ user }) {
                 }, {});
 
                 let totalInicioAno = 0;
-                let lastFinal = 0;
                 let lastExterno = 0; 
                 let lastDivisao = 0;
                 
@@ -594,14 +667,13 @@ export default function BankrollManager({ user }) {
                     if (firstActive) totalInicioAno += firstActive.inicio;
                     const last = [...recs].reverse().find(r => r.finalBanca > 0);
                     if (last) {
-                        lastFinal += last.finalBanca;
                         lastExterno += last.externo;
                         lastDivisao = last.divisao; 
                     }
                 });
 
-                // --- CORREÇÃO DA APOSTA NA LINHA DOS ANOS (TOTAL GERAL) ---
                 const apostaCalculada = totalInicioAno + totalResBruto;
+                const lastFinal = totalInicioAno + totalResLiquido;
 
                 const variacaoLiquida = totalInicioAno > 0 ? totalResLiquido / totalInicioAno : 0;
                 const yearUnidadeValor = lastDivisao > 0 ? apostaCalculada / lastDivisao : 0;
@@ -677,7 +749,6 @@ export default function BankrollManager({ user }) {
         return 'text-yellow-400';
     };
     
-    // --- LÓGICA DO TOTAL GERAL (ANNUAL TOTALS) ---
     const annualTotals = useMemo(() => {
         if (filteredData.length === 0) return { inicio: 0, externo: 0, aposta: 0, investimento: 0, resultadoBruto: 0, resultadoLiquido: 0, final: 0, divisao: 0 };
         
@@ -700,7 +771,6 @@ export default function BankrollManager({ user }) {
             return acc;
         }, {});
 
-        let sumFinal = 0;
         let sumInicio = 0;
         let sumExterno = 0;
         let lastDivisao = 0;
@@ -712,7 +782,6 @@ export default function BankrollManager({ user }) {
             });
             const lastActiveRecord = [...bankRecords].reverse().find(r => r.finalBanca > 0);
             if (lastActiveRecord) {
-                sumFinal += lastActiveRecord.finalBanca;
                 sumExterno += lastActiveRecord.externo;
                 lastDivisao = lastActiveRecord.divisao; 
             }
@@ -733,10 +802,9 @@ export default function BankrollManager({ user }) {
              totals.inicio = sumInicio;
         }
         
-        // --- REGRA UNIVERSAL DA APOSTA ---
         totals.aposta = totals.inicio + totals.resultadoBruto;
+        totals.final = totals.inicio + totals.resultadoLiquido; 
         
-        totals.final = sumFinal;
         totals.externo = sumExterno;
         totals.divisao = lastDivisao;
 
@@ -804,7 +872,6 @@ export default function BankrollManager({ user }) {
                 </div>
             </div>
 
-            {/* --- DASHBOARD (3 QUADRADOS) --- */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 <div className="bg-[#16202a] p-4 rounded-xl border border-gray-800 shadow-lg flex flex-col items-center justify-center">
                     <span className="text-xs text-gray-500 uppercase tracking-widest font-bold mb-1">Total Investido</span>
@@ -879,9 +946,7 @@ export default function BankrollManager({ user }) {
                                      <td className="px-2 py-3 text-white uppercase tracking-wider" colSpan="2">Total {selectedYear === 'Total Geral' ? 'Geral' : selectedYear}</td>
                                      
                                      <td className="px-2 py-3 text-center whitespace-nowrap text-cyan-300">{selectedYear === 'Total Geral' ? '-' : formatValue(annualTotals.inicio)}</td>
-                                     
                                      <td className="px-2 py-3 text-center whitespace-nowrap text-cyan-300">{selectedYear === 'Total Geral' ? '-' : formatValue(annualTotals.aposta)}</td>
-                                     
                                      <td className="px-2 py-3 text-center whitespace-nowrap text-cyan-300">{formatValue(annualTotals.investimento)}</td>
                                      <td className="px-2 py-3 text-center whitespace-nowrap text-gray-500">{annualTotals.divisao}</td>
                                      
@@ -907,12 +972,11 @@ export default function BankrollManager({ user }) {
                 )}
             </div>
 
-            {/* --- TABELA DE SAQUES --- */}
+            {/* --- TABELA DE SAQUES (COM TOOLTIP) --- */}
             {withdrawalsData.length > 0 && selectedYear === 'Total Geral' && (
                 <div className="mb-8 bg-[#16202a] p-4 rounded-2xl border border-gray-800 shadow-xl">
                     <h3 className="text-lg font-bold text-gray-100 mb-4 flex items-center">
                         <span className="bg-green-500/10 text-green-400 p-2 rounded mr-3">💸</span> Histórico de Saques
-                        <span className="text-[10px] font-normal text-gray-500 ml-2 uppercase tracking-wide">(Final Ano Anterior - Início Ano Seguinte)</span>
                     </h3>
                     <div className="overflow-x-auto">
                         <table className="min-w-full text-xs text-left text-gray-400">
@@ -920,18 +984,35 @@ export default function BankrollManager({ user }) {
                                 <tr>
                                     <th className="px-4 py-3">Ano Ref.</th>
                                     {availableBancas.map(b => <th key={b} className="px-4 py-3 text-center">{b}</th>)}
-                                    <th className="px-4 py-3 text-center text-white">Total Saques</th>
+                                    <th className="px-4 py-3 text-center text-white">Saque Líquido Global</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {withdrawalsData.map((row) => (
                                     <tr key={row.year} className="border-b border-gray-800 hover:bg-slate-800/50 transition-colors">
                                         <td className="px-4 py-3 font-bold text-gray-300">{row.year}</td>
-                                        {availableBancas.map(b => (
-                                            <td key={b} className={`px-4 py-3 text-center ${getTrendClass(row.banks[b])}`}>
-                                                {formatValue(row.banks[b] || 0)}
-                                            </td>
-                                        ))}
+                                        {availableBancas.map(b => {
+                                            const cellData = row.banks[b];
+                                            const val = cellData?.value || 0;
+                                            const isInternal = row.total <= 0 && val > 0;
+                                            return (
+                                                <td key={b} className="px-4 py-3 text-center group relative cursor-help" title={cellData?.tooltip}>
+                                                    <div className="flex flex-col items-center justify-center">
+                                                        <div className="flex items-center justify-center gap-2">
+                                                            <span className={`${isInternal ? 'text-gray-500 font-bold' : getTrendClass(val)} border-b border-dashed border-gray-600`}>
+                                                                {formatValue(val)}
+                                                            </span>
+                                                            <button 
+                                                                onClick={() => handleManualAdjustment(row.year, b, 'saque', val)}
+                                                                className="opacity-0 group-hover:opacity-100 text-[10px] bg-gray-700 hover:bg-gray-600 p-1 rounded transition-all absolute right-2"
+                                                                title="Editar Saque"
+                                                            >✏️</button>
+                                                        </div>
+                                                        {isInternal && <span className="text-[8px] text-gray-500 uppercase mt-1 tracking-widest">(Interno)</span>}
+                                                    </div>
+                                                </td>
+                                            );
+                                        })}
                                         <td className={`px-4 py-3 text-center font-black bg-gray-800/50 ${getTrendClass(row.total)}`}>
                                             {formatValue(row.total)}
                                         </td>
@@ -958,12 +1039,11 @@ export default function BankrollManager({ user }) {
                 </div>
             )}
 
-            {/* --- TABELA DE INVESTIMENTOS --- */}
+            {/* --- TABELA DE APORTES (COM TOOLTIP) --- */}
             {investmentsTableData.length > 0 && selectedYear === 'Total Geral' && (
                 <div className="mb-8 bg-[#16202a] p-4 rounded-2xl border border-gray-800 shadow-xl">
                     <h3 className="text-lg font-bold text-gray-100 mb-4 flex items-center">
                         <span className="bg-cyan-500/10 text-cyan-400 p-2 rounded mr-3">💰</span> Histórico de Aportes
-                        <span className="text-[10px] font-normal text-gray-500 ml-2 uppercase tracking-wide">(Injeção de capital novo)</span>
                     </h3>
                     <div className="overflow-x-auto">
                         <table className="min-w-full text-xs text-left text-gray-400">
@@ -971,18 +1051,35 @@ export default function BankrollManager({ user }) {
                                 <tr>
                                     <th className="px-4 py-3">Ano Ref.</th>
                                     {availableBancas.map(b => <th key={b} className="px-4 py-3 text-center">{b}</th>)}
-                                    <th className="px-4 py-3 text-center text-white">Total Aportes</th>
+                                    <th className="px-4 py-3 text-center text-white">Aporte Líquido Global</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {investmentsTableData.map((row) => (
                                     <tr key={row.year} className="border-b border-gray-800 hover:bg-slate-800/50 transition-colors">
                                         <td className="px-4 py-3 font-bold text-gray-300">{row.year}</td>
-                                        {availableBancas.map(b => (
-                                            <td key={b} className={`px-4 py-3 text-center ${getTrendClass(row.banks[b])}`}>
-                                                {formatValue(row.banks[b] || 0)}
-                                            </td>
-                                        ))}
+                                        {availableBancas.map(b => {
+                                            const cellData = row.banks[b];
+                                            const val = cellData?.value || 0;
+                                            const isInternal = row.total <= 0 && val > 0;
+                                            return (
+                                                <td key={b} className="px-4 py-3 text-center group relative cursor-help" title={cellData?.tooltip}>
+                                                    <div className="flex flex-col items-center justify-center">
+                                                        <div className="flex items-center justify-center gap-2">
+                                                            <span className={`${isInternal ? 'text-gray-500 font-bold' : getTrendClass(val)} border-b border-dashed border-gray-600`}>
+                                                                {formatValue(val)}
+                                                            </span>
+                                                            <button 
+                                                                onClick={() => handleManualAdjustment(row.year, b, 'aporte', val)}
+                                                                className="opacity-0 group-hover:opacity-100 text-[10px] bg-gray-700 hover:bg-gray-600 p-1 rounded transition-all absolute right-2"
+                                                                title="Editar Aporte"
+                                                            >✏️</button>
+                                                        </div>
+                                                        {isInternal && <span className="text-[8px] text-gray-500 uppercase mt-1 tracking-widest">(Interno)</span>}
+                                                    </div>
+                                                </td>
+                                            );
+                                        })}
                                         <td className={`px-4 py-3 text-center font-black bg-gray-800/50 ${getTrendClass(row.total)}`}>
                                             {formatValue(row.total)}
                                         </td>
