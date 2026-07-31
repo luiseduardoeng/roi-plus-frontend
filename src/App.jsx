@@ -56,9 +56,20 @@ const SliderInput = ({ label, value, setValue, min, max }) => (
   <div className="flex flex-col mb-3 group">
     <div className="flex justify-between items-center mb-1">
       <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider group-hover:text-cyan-300 transition-colors">{label}</span>
-      <span className="text-[10px] font-bold text-white bg-white/10 px-2 py-0.5 rounded-full border border-white/10 shadow-inner">{value}</span>
+      {/* Aqui adicionamos a formatação numérica e o 'x' do multiplicador */}
+      <span className="text-[10px] font-bold text-white bg-white/10 px-2 py-0.5 rounded-full border border-white/10 shadow-inner">
+        {Number(value).toFixed(2)}x
+      </span>
     </div>
-    <input type="range" min={min} max={max} step="0.1" value={value} onChange={e => setValue(parseFloat(e.target.value))} className="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-cyan-500 hover:accent-cyan-400 transition-colors" />
+    <input 
+      type="range" 
+      min={min} 
+      max={max} 
+      step="0.05" /* Mudei o step para 0.05 para dar mais precisão no ajuste fino */
+      value={value} 
+      onChange={e => setValue(parseFloat(e.target.value))} 
+      className="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-cyan-500 hover:accent-cyan-400 transition-colors" 
+    />
   </div>
 );
 
@@ -292,12 +303,17 @@ function AnalysisDisplay({ homeTeam, awayTeam, homeCrest, awayCrest, lambdaHomeF
             <h3 className="text-[10px] font-black text-gray-500 uppercase mb-5 border-b border-gray-800 pb-2 tracking-wider flex items-center">
                <span className="w-2 h-2 bg-cyan-500 rounded-full mr-2"></span> Ajustes de Cenário
             </h3>
+            
+            {/* --- MANDANTE --- */}
             <SliderInput label={`Must Win (${homeTeam})`} value={mustWinHome} setValue={setMustWinHome} min="0.6" max="1.5" />
-            <SliderInput label={`Desfalques (${homeTeam})`} value={setDesfalquesHome} setValue={setDesfalquesHome} min="0.5" max="1" />
+            <SliderInput label={`Desfalques (${homeTeam})`} value={desfalquesHome} setValue={setDesfalquesHome} min="0.5" max="1" />
             <SliderInput label="Força Mando" value={mando} setValue={setMando} min="0.8" max="1.5" />
+            
             <div className="my-6 border-t border-gray-800"></div>
+            
+            {/* --- VISITANTE --- */}
             <SliderInput label={`Must Win (${awayTeam})`} value={mustWinAway} setValue={setMustWinAway} min="0.6" max="1.5" />
-            <SliderInput label={`Desfalques (${awayTeam})`} value={setDesfalquesAway} setValue={setDesfalquesAway} min="0.5" max="1" />
+            <SliderInput label={`Desfalques (${awayTeam})`} value={desfalquesAway} setValue={setDesfalquesAway} min="0.5" max="1" />
           </div>
         </div>
 
